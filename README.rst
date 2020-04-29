@@ -16,7 +16,7 @@ assembly_information_model: Assembly Information Model
 
 .. Write project description
 
-**Assembly Information Model** ...
+**This repository provides datastructures, tools and methods for assembly information modeling.** ...
 
 
 Main features
@@ -26,41 +26,45 @@ Main features
 * feature
 * more features
 
-**assembly_information_model** runs on Python x.x and x.x.
+**assembly_information_model** runs on Python 3.8 and COMPAS 15.6
 
-
-Documentation
--------------
-
-.. Explain how to access documentation: API, examples, etc.
-
-..
-.. optional sections:
 
 Requirements
 ------------
 
-.. Write requirements instructions here
+* COMPAS
+
+Installation
+::
+
+    (base)  conda config --add channels conda-forge
+    (base)  conda create -n your_env_name python=3.8 compas=0.15.6 --yes
+    (base)  conda activate your_env_name
+    (your_env_name) python -m compas_rhino.install -v 6.0 -p compas compas_ghpython compas_rhino
+    
+Verify
+::
+
+    (your_env_name) python
+    >>> import compas_fab
+    >>> compas_fab.__version__
+    '0.15.6'
+    >>> exit()
 
 
 Installation
 ------------
 
-.. Write installation instructions here
-
-
-Contributing
-------------
-
 Make sure you setup your local development environment correctly:
 
 * Clone the `assembly_information_model <https://github.com/augmentedfabricationlab/assembly_information_model>`_ repository.
-* Install development dependencies and make the project accessible from Rhino:
+* Install development dependencies and make the project accessible from Rhino (change to repository directory in the Anaconda prompt):
 
 ::
 
     pip install -r requirements-dev.txt
     invoke add-to-rhino
+    pip install your_filepath_to_assembly_information_model 
 
 **You're ready to start working!**
 
