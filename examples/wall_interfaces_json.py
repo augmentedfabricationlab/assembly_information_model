@@ -41,8 +41,9 @@ PATH_FROM = os.path.join(DATA, 'stretcher_bond.json')
 ASSEMBLY_PATH = os.path.abspath(os.path.join(HERE, "..", "src"))
 sys.path.append(ASSEMBLY_PATH)
 
-PATH_TO = os.path.join(DATA, os.path.splitext(os.path.basename(__file__))[0] + ".json")
-print(PATH_TO)
+#PATH_TO = os.path.join(DATA, os.path.splitext(os.path.basename(__file__))[0] + ".json")
+#print(PATH_TO)
+PATH_TO = os.path.join(DATA, 'stretcher_bond_interfaces.json')
 
 from assembly_information_model.assembly import Assembly
 from assembly_information_model.assembly.interfaces_numpy import assembly_interfaces_numpy_fromtojson
