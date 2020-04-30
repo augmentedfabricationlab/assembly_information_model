@@ -377,7 +377,8 @@ class Element(object):
             self._mesh = _deserialize_from_data(data['_mesh']) 
         if 'trajectory' in data:
             #self.trajectory = [JointTrajectoryPoint.from_data(d) for d in data['trajectory']]
-            self.trajectory = _deserialize_from_data(data['trajectory']) 
+            #self.trajectory = _deserialize_from_data(data['trajectory']) 
+            self.trajectory = [Frame.from_data(d) for d in data['trajectory']]
         if 'id' in data:
             self.id = data['id']
 
