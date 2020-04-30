@@ -29,8 +29,23 @@ class Element(object):
 
     Attributes
     ----------
-    frame : :class:`compas.geometry.Frame`
-        The frame of the element.
+    _frame : :class:`compas.geometry.Frame`
+        The frame of the element where the element is created.
+    
+    _tool_frame : :class:`compas.geometry.Frame`
+        The frame of the element where it is held by the robot
+    
+    _source : :class:`compas.geometry.Shape`
+        The source geometry of the element, e.g., `compas.geometry.Box`
+    
+    _mesh : :class:`compas.geometry.Mesh`
+        The mesh geometry of the element.
+
+    trajectory : :class:`compas_fab.robots.JointTrajectory`
+        The robot trajectory in joint space containing `compas_fab.robots.JointTrajectoryPoints`
+    
+    path : :class:`compas.geometry.Frame`
+        The robot trajectory in cartesian space containing a list of `compas.geometry.Frame`
 
     Examples
     --------
@@ -42,12 +57,17 @@ class Element(object):
 
     def __init__(self, frame):
         super(Element, self).__init__()
+
         self.frame = frame
-        self.id = ""
-        self.trajectory = None
-        self._gripping_frame = None
-        self._source = None
+        self._tool_frame = None
+
+        self._source = None 
         self._mesh = None
+
+        self.trajectory = None 
+        self.path = []
+        
+        
 
     @classmethod
     def from_mesh(cls, mesh, frame):
@@ -107,55 +127,37 @@ class Element(object):
         return cls.from_shape(box, box.frame)
 
     @classmethod
-    def from_dimensions(cls, length=240, width=115, height=50, typology="full", gripping_frame=None):
+    def from_dimensions(cls, length, width, height):
         """Construct an element with a box primitive with the given dimensions.
 
         Parameters
         ----------
         length : float
-            length of the brick.
+            length of the box.
         width : float
-            width of the brick.
+            width of the box.
         height : float
-            height of the brick.
-        typology : "string"
-            type of the brick, "full" or "half"
-        gripping_frame : :class:`Frame`
-            frame for robot gripping.
-
+            height of the box.
         Returns
         -------
         :class:`Element`
             New instance of element.
         """
-        if not gripping_frame:
-            gripping_frame = Frame([0, 0, height], [1, 0, 0], [0, -1, 0]) #frame for robot gripping
         
-        box_frame = Frame([-length/2., -width/2., 0.], [1, 0, 0], [0, 1, 0]) #center of the box frame
-        box_frame = Frame([0., 0., height/2], [1, 0, 0], [0, 1, 0]) #center of the box frame
-        box = Box(box_frame, length, width, height)
-        
-        element = cls(gripping_frame) # element initialisation
-        element.id = typology
-        element._source = box
-        element._mesh = Mesh.from_shape(element._source)
-
-        return element
+        frame = Frame([0., 0., height/2], [1, 0, 0], [0, 1, 0]) #center of the box frame
+        box = Box(frame, length, width, height)
+        return cls.from_shape(box, frame)
 
     @classmethod
-    def from_polysurface(cls, guid):
+    def from_polysurface(cls, guid, frame):
         """Class method for constructing a block from a Rhino poly-surface.
 
         Parameters
         ----------
         guid : str
             The GUID of the poly-surface.
-
-        Returns
-        -------
-        Block
-            The block corresponding to the poly-surface.
-
+        frame : :class:`Frame`
+            Origin frame of the element.
         Notes
         -----
         In Rhino, poly-surfaces are organised such that the cycle directions of
@@ -164,26 +166,27 @@ class Element(object):
         also point "out" of the enclosed volume.
         """
         from compas_rhino.geometry import RhinoSurface
-        surface = RhinoSurface.from_guid(guid)
-        return surface.brep_to_compas(cls)
+        element = cls(frame)
+        element._source = RhinoSurface.from_guid(guid)
+        element._mesh = element._source.brep_to_compas()
+        return element
 
     @classmethod
-    def from_rhinomesh(cls, guid):
+    def from_rhinomesh(cls, guid, frame):
         """Class method for constructing a block from a Rhino mesh.
 
         Parameters
         ----------
         guid : str
             The GUID of the mesh.
-
-        Returns
-        -------
-        Block
-            The block corresponding to the Rhino mesh.
+        frame : :class:`Frame`
+            Origin frame of the element.
         """
         from compas_rhino.geometry import RhinoMesh
-        mesh = RhinoMesh.from_guid(guid)
-        return mesh.to_compas(cls)
+        element = cls(frame)
+        element._source = RhinoMesh.from_guid(guid)
+        element._mesh = element._source.mesh.to_compas()
+        return element
 
     @property
     def mesh(self):
@@ -215,25 +218,25 @@ class Element(object):
         self._frame = frame.copy()
 
     @property
-    def gripping_frame(self):
-        """Gripping frame of the element."""
-        if not self._gripping_frame:
-            self._gripping_frame = self.frame.copy()
+    def tool_frame(self):
+        """tool frame of the element"""
+        if not self._tool_frame:
+            self._tool_frame = self.frame.copy()
 
-        return self._gripping_frame
+        return self._tool_frame
 
-    @gripping_frame.setter
-    def gripping_frame(self, frame):
-        self._gripping_frame = frame.copy() if frame else None
+    @tool_frame.setter
+    def tool_frame(self, frame):
+        self._tool_frame = frame.copy()
     
     @property
     def pose_quaternion(self):
-        """ formats the element's gripping frame to a pose quaternion and returns the pose"""
-        return list(self._gripping_frame.point) + list(self._gripping_frame.quaternion)
+        """ formats the element's tool frame to a pose quaternion and returns the pose"""
+        return list(self._tool_frame.point) + list(self._tool_frame.quaternion)
 
     @property
     def centroid(self):
-        return self.mesh.centroid()
+        return self._mesh.centroid()
 
     @property
     def face_frames(self):
@@ -280,19 +283,18 @@ class Element(object):
         -----
         The face with the highest centroid is considered the *top* face.
         """
-        frames = self.face_frames()
         fkey_centroid = {fkey: self._mesh.face_center(fkey) for fkey in self._mesh.faces()}
         fkey, _ = sorted(fkey_centroid.items(), key=lambda x: x[1][2])[-1]
         return fkey
 
     @property
     def center(self):
-        """Compute the center of mass of the block.
+        """Compute the center of mass of the element.
 
         Returns
         -------
         point
-            The center of mass of the block.
+            The center of mass of the element.
         """
         vertices = [self._mesh.vertex_coordinates(key) for key in self._mesh.vertices()]
         faces = [self._mesh.face_vertices(fkey) for fkey in self._mesh.faces()]
@@ -300,15 +302,15 @@ class Element(object):
 
     @property
     def volume(self):
-        """Compute the volume of the block.
+        """Compute the volume of the element.
 
         Returns
         -------
         float
-            The volume of the block.
+            The volume of the element.
         """
-        vertices = [self.vertex_coordinates(key) for key in self.vertices()]
-        faces = [self.face_vertices(fkey) for fkey in self.faces()]
+        vertices = [self._mesh.vertex_coordinates(key) for key in self._mesh.vertices()]
+        faces = [self._mesh.face_vertices(fkey) for fkey in self._mesh.faces()]
         v = volume_polyhedron((vertices, faces))
         return v
 
@@ -348,39 +350,40 @@ class Element(object):
 
         # Only include gripping plane if attribute is really set
         # (unlike the property getter that defaults to `self.frame`)
-        if self._gripping_frame:
-            d['gripping_frame'] = self.gripping_frame.to_data()
+        if self._tool_frame:
+            d['_tool_frame'] = self._tool_frame.to_data()
 
         if self._source:
             d['_source'] = _serialize_to_data(self._source)
         
         if self._mesh:
-            d['_mesh'] = _serialize_to_data(self._mesh)
+            #d['_mesh'] = _serialize_to_data(self._mesh)
+            d['_mesh'] = self._mesh.to_data()
 
-        # Probably best to store JointTrajectory instead of JointTrajectoryPoints
         if self.trajectory:
-            d['trajectory'] = [p.to_data() for p in self.trajectory]
+            d['trajectory'] = self.trajectory.to_data()
 
-        if self.id:
-            d['id'] = self.id
+        if self.path:
+            d['path'] = [f.to_data() for f in self.path]
             
         return d
 
     @data.setter
     def data(self, data):
         self.frame = Frame.from_data(data['frame'])
-        if 'gripping_frame' in data:
-            self.gripping_frame = Frame.from_data(data['gripping_frame'])
+        if '_tool_frame' in data:
+            self.tool_frame = Frame.from_data(data['_tool_frame'])
         if '_source' in data:
             self._source = _deserialize_from_data(data['_source'])
         if '_mesh' in data:
-            self._mesh = _deserialize_from_data(data['_mesh']) 
+            #self._mesh = _deserialize_from_data(data['_mesh']) 
+            self._mesh = Mesh.from_data(data['_mesh'])
         if 'trajectory' in data:
-            #self.trajectory = [JointTrajectoryPoint.from_data(d) for d in data['trajectory']]
-            #self.trajectory = _deserialize_from_data(data['trajectory']) 
-            self.trajectory = [Frame.from_data(d) for d in data['trajectory']]
-        if 'id' in data:
-            self.id = data['id']
+            #from compas_fab.robots import JointTrajectory
+            #self.trajectory = JointTrajectory.from_data(data['trajectory'])
+            self.trajectory = _deserialize_from_data(data['trajectory'])
+        if 'path' in data:
+            self.path = [Frame.from_data(d) for d in data['path']]
 
     def to_data(self):
         """Returns the data dictionary that represents the element.
@@ -419,8 +422,8 @@ class Element(object):
         >>> element.transform(Translation([1, 0, 0]))
         """
         self.frame.transform(transformation)
-        if self._gripping_frame:
-            self.gripping_frame.transform(transformation)
+        if self._tool_frame:
+            self.tool_frame.transform(transformation)
         if self._source:
             if type(self._source) == Mesh:
                 mesh_transform(self._source, transformation)  # it would be really good to have Mesh.transform()
@@ -428,6 +431,8 @@ class Element(object):
                 self._source.transform(transformation)
         if self._mesh:
             mesh_transform(self._mesh, transformation)  # it would be really good to have Mesh.transform()
+        if self.path:
+            [f.transform(transformation) for f in self.path]
     
     def transformed(self, transformation):
         """Returns a transformed copy of this element.
@@ -459,12 +464,13 @@ class Element(object):
         Element
         """
         elem = Element(self.frame.copy())
-        if self._gripping_frame:
-            elem.gripping_frame = self.gripping_frame.copy()
+        if self._tool_frame:
+            elem.tool_frame = self.tool_frame.copy()
         if self._source:
             elem._source = self._source.copy()
         if self._mesh:
             elem._mesh = self._mesh.copy()
-        if self.id:
-            elem.id = self.id
+        if self.path:
+            elem.path = [f.copy() for f in self.path]
+
         return elem
