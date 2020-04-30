@@ -30,22 +30,22 @@ class Element(object):
     Attributes
     ----------
     _frame : :class:`compas.geometry.Frame`
-        The frame of the element where the element is created.
+        The frame of the element.
     
     _tool_frame : :class:`compas.geometry.Frame`
-        The frame of the element where it is held by the robot
+        The frame of the element where the robot's tool should attach to.
     
     _source : :class:`compas.geometry.Shape`
-        The source geometry of the element, e.g., `compas.geometry.Box`
+        The source geometry of the element, e.g., `compas.geometry.Box`.
     
     _mesh : :class:`compas.geometry.Mesh`
         The mesh geometry of the element.
 
     trajectory : :class:`compas_fab.robots.JointTrajectory`
-        The robot trajectory in joint space containing `compas_fab.robots.JointTrajectoryPoints`
+        The robot trajectory in joint space.
     
-    path : :class:`compas.geometry.Frame`
-        The robot trajectory in cartesian space containing a list of `compas.geometry.Frame`
+    path : :list: :class:`compas.geometry.Frame`
+        The robot tool path in cartesian space.
 
     Examples
     --------
