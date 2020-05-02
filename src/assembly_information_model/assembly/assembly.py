@@ -5,12 +5,8 @@ from __future__ import print_function
 import json
 
 from compas.datastructures import Network
-#from compas.datastructures._mixins import FromToData
-#from compas.datastructures._mixins import FromToJson
 
 from .element import Element
-#from .utilities import _deserialize_from_data
-#from .utilities import _serialize_to_data
 
 from .utilities import FromToData
 from .utilities import FromToJson
