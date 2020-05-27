@@ -19,8 +19,8 @@ length = 0.240
 width = 0.115
 height = 0.050
 
-brick = Element.from_dimensions(length, width, height, "full")
-halfbrick = Element.from_dimensions(length/2, width, height, "half")
+brick = Element.from_dimensions(length, width, height)
+halfbrick = Element.from_dimensions(length/2, width, height)
 
 COURSES = 25
 BRICKS_PER_COURSE = 4
