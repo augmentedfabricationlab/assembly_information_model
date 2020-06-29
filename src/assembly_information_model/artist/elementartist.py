@@ -6,14 +6,14 @@ import compas_rhino
 from compas_rhino.artists import MeshArtist
 
 
-__all__ = ['BlockArtist']
+__all__ = ['ElementArtist']
 
 
-class BlockArtist(MeshArtist):
+class ElementArtist(MeshArtist):
     """An artist for painting blocks."""
 
     def __init__(self, *args, **kwargs):
-        super(BlockArtist, self).__init__(*args, **kwargs)
+        super(ElementArtist, self).__init__(*args, **kwargs)
         self.settings.update({
             'color.vertex': (0, 0, 0),
             'color.edge': (0, 0, 0),

@@ -31,19 +31,19 @@ class Element(object):
     ----------
     _frame : :class:`compas.geometry.Frame`
         The frame of the element.
-    
+
     _tool_frame : :class:`compas.geometry.Frame`
         The frame of the element where the robot's tool should attach to.
-    
+
     _source : :class:`compas.geometry.Shape`
         The source geometry of the element, e.g., `compas.geometry.Box`.
-    
+
     _mesh : :class:`compas.geometry.Mesh`
         The mesh geometry of the element.
 
     trajectory : :class:`compas_fab.robots.JointTrajectory`
         The robot trajectory in joint space.
-    
+
     path : :list: :class:`compas.geometry.Frame`
         The robot tool path in cartesian space.
 
@@ -61,13 +61,13 @@ class Element(object):
         self.frame = frame
         self._tool_frame = None
 
-        self._source = None 
+        self._source = None
         self._mesh = None
 
-        self.trajectory = None 
+        self.trajectory = None
         self.path = []
-        
-        
+
+
 
     @classmethod
     def from_mesh(cls, mesh, frame):
@@ -143,7 +143,7 @@ class Element(object):
         :class:`Element`
             New instance of element.
         """
-        
+
         frame = Frame([0., 0., height/2], [1, 0, 0], [0, 1, 0]) #center of the box frame
         box = Box(frame, length, width, height)
         return cls.from_shape(box, frame)
@@ -228,7 +228,7 @@ class Element(object):
     @tool_frame.setter
     def tool_frame(self, frame):
         self._tool_frame = frame.copy()
-    
+
     @property
     def pose_quaternion(self):
         """ formats the element's tool frame to a pose quaternion and returns the pose"""
@@ -355,17 +355,17 @@ class Element(object):
 
         if self._source:
             d['_source'] = _serialize_to_data(self._source)
-        
+
         if self._mesh:
             #d['_mesh'] = _serialize_to_data(self._mesh)
             d['_mesh'] = self._mesh.to_data()
 
         if self.trajectory:
-            d['trajectory'] = self.trajectory.to_data()
+            d['trajectory'] = [f.to_data() for f in self.trajectory]
 
         if self.path:
             d['path'] = [f.to_data() for f in self.path]
-            
+
         return d
 
     @data.setter
@@ -376,7 +376,7 @@ class Element(object):
         if '_source' in data:
             self._source = _deserialize_from_data(data['_source'])
         if '_mesh' in data:
-            #self._mesh = _deserialize_from_data(data['_mesh']) 
+            #self._mesh = _deserialize_from_data(data['_mesh'])
             self._mesh = Mesh.from_data(data['_mesh'])
         if 'trajectory' in data:
             #from compas_fab.robots import JointTrajectory
@@ -433,7 +433,7 @@ class Element(object):
             mesh_transform(self._mesh, transformation)  # it would be really good to have Mesh.transform()
         if self.path:
             [f.transform(transformation) for f in self.path]
-    
+
     def transformed(self, transformation):
         """Returns a transformed copy of this element.
 
