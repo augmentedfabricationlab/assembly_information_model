@@ -46,8 +46,8 @@ Verify
 ::
 
     (your_env_name) python
-    >>> import compas_fab
-    >>> compas_fab.__version__
+    >>> import compas
+    >>> compas.__version__
     '0.15.6'
     >>> exit()
 
@@ -93,4 +93,6 @@ Releasing this project
 Credits
 -------------
 
-This package was created by Kathrin Doerfler <doerfler@tum.de> `@kathrindoerfler <https://github.com/kathrindoerfler>`_ at `@augmentedfabricationlab <https://github.com/augmentedfabricationlab>`_
+This package was created by Kathrin Doerfler <doerfler@tum.de> `@kathrindoerfler <https://github.com/kathrindoerfler>`_ at `@augmentedfabricationlab <https://github.com/augmentedfabricationlab>`_, based on `@BlockResearchGroup<https://github.com/BlockResearchGroup/compas_assembly>`_
+
+
