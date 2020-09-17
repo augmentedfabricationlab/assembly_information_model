@@ -11,11 +11,11 @@ from .node import Node
 from .utilities import FromToData
 from .utilities import FromToJson
 
-__all__ = ['FIM']
+__all__ = ['AMIM']
 
 
-class FIM(FromToData, FromToJson):
-    """A data structure for non-discrete element fabrications.
+class AMIM(FromToData, FromToJson):
+    """A data structure for non-discrete element fabrication.
 
     A model is essentially a network of nodes.
     Each geometrical node is represented by a node of the network.
@@ -201,9 +201,9 @@ class FIM(FromToData, FromToJson):
         -------
         Assembly
         """
-        fabrication = self.copy()
-        fabrication.transform(transformation)
-        return fabrication
+        manufacturing = self.copy()
+        manufacturing.transform(transformation)
+        return manufacturing
 
     def copy(self):
         """Returns a copy of this model.
