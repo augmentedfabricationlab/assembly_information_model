@@ -21,24 +21,24 @@ if os.getenv('SPELLCHECK'):
 
 source_suffix = '.rst'
 master_doc = 'index'
-project = 'assembly_information_model'
-year = '2018'
-author = 'Gramazio Kohler Research'
+project = 'additive_manufacturing_information_model'
+year = '2020'
+author = 'Gido Dielemans'
 copyright = '{0}, {1}'.format(year, author)
 version = release = '0.1.0'
 
 pygments_style = 'trac'  # Perhaps change to sphinx
 templates_path = ['.']
 extlinks = {
-    'issue': ('https://github.com/augmentedfabricationlab/assembly_information_model/issues/%s', '#'),
-    'pr': ('https://github.com/augmentedfabricationlab/assembly_information_model/pull/%s', 'PR #'),
+    'issue': ('https://github.com/augmentedfabricationlab/additive_manufacturing_information_model/issues/%s', '#'),
+    'pr': ('https://github.com/augmentedfabricationlab/additive_manufacturing_information_model/pull/%s', 'PR #'),
 }
 # on_rtd is whether we are on readthedocs.org
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 html_theme = 'alabaster'
 html_theme_options = {
     'logo': 'logo.png',
-    'description': 'Assembly Information Model',
+    'description': 'Additive Manufacturing Information Model',
     'github_user': 'augmentedfabricationlab',
     'github_repo': project,
     'fixed_sidebar': True,

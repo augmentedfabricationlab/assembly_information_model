@@ -19,7 +19,7 @@ __all__ = [
 
 class FromToData(object):
 
-    __module__ = 'assembly_information_model.assembly.utilities'
+    __module__ = 'additive_manufacturing_information_model.model.utilities'
 
     @classmethod
     def from_data(cls, data):

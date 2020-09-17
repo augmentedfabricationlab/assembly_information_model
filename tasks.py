@@ -122,11 +122,11 @@ def clean(ctx, docs=True, bytecode=True, builds=True):
         folders.append('dist/')
 
     if bytecode:
-        folders.append('src/assembly_information_model/__pycache__')
+        folders.append('src/additive_manufacturing_information_model/__pycache__')
 
     if builds:
         folders.append('build/')
-        folders.append('src/assembly_information_model.egg-info/')
+        folders.append('src/additive_manufacturing_information_model.egg-info/')
 
     for folder in folders:
         rmtree(os.path.join(BASE_FOLDER, folder), ignore_errors=True)
