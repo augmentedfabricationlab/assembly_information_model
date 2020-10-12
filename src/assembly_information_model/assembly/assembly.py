@@ -6,49 +6,52 @@ import json
 
 from compas.datastructures import Network
 
-from .node import Node
+from .element import Element
 
 from .utilities import FromToData
 from .utilities import FromToJson
 
-__all__ = ['FIM']
+__all__ = ['Assembly']
 
 
-class FIM(FromToData, FromToJson):
-    """A data structure for non-discrete element fabrications.
+class Assembly(FromToData, FromToJson):
+    """A data structure for discrete element assemblies.
 
-    A model is essentially a network of nodes.
-    Each geometrical node is represented by a node of the network.
-    Each line drawn between nodes is represented by an edge of the network.
+    An assembly is essentially a network of assembly elements.
+    Each element is represented by a node of the network.
+    Each interface or connection between elements is represented by an edge of the network.
 
     Attributes
     ----------
     network : :class:`compas.Network`, optional
-    nodes : list of :class:`Node`, optional
-        A list of model nodes.
+    elements : list of :class:`Element`, optional
+        A list of assembly elements.
     attributes : dict, optional
-        User-defined attributes of the model.
+        User-defined attributes of the assembly.
         Built-in attributes are:
         * name (str) : ``'Assembly'``
     default_element_attribute : dict, optional
-        User-defined default attributes of the elements of the model.
+        User-defined default attributes of the elements of the assembly.
         The built-in attributes are:
         * is_planned (bool) : ``False``
         * is_placed (bool) : ``False``
     default_connection_attributes : dict, optional
-        User-defined default attributes of the connections of the model.
+        User-defined default attributes of the connections of the assembly.
 
     Examples
     --------
-
+    >>> assembly = Assembly()
+    >>> for i in range(2):
+    >>>     element = Element.from_box(Box(Frame.worldXY(), 10, 5, 2))
+    >>>     assembly.add_element(element)
     """
 
     def __init__(self,
-                 nodes=None,
+                 elements=None,
                  attributes=None,
-                 default_node_attribute=None,
+                 default_element_attribute=None,
                  default_connection_attributes=None):
-
+        
         self.network = Network()
         self.network.attributes.update({'name': 'Assembly'})
 
@@ -60,38 +63,38 @@ class FIM(FromToData, FromToJson):
             'is_placed': False
         })
 
-        if default_node_attribute is not None:
-            self.network.default_node_attributes.update(default_node_attribute)
+        if default_element_attribute is not None:
+            self.network.default_node_attributes.update(default_element_attribute)
 
         if default_connection_attributes is not None:
             self.network.default_edge_attributes.update(default_connection_attributes)
 
-        if nodes:
-            for node in nodes:
-                self.add_node(node)
+        if elements:
+            for element in elements:
+                self.add_element(element)
 
     @property
     def name(self):
-        """str : The name of the model."""
+        """str : The name of the assembly."""
         return self.network.attributes.get('name', None)
 
     @name.setter
     def name(self, value):
         self.network.attributes['name'] = value
 
-    def number_of_nodes(self):
-        """Compute the number of nodes of the model.
+    def number_of_elements(self):
+        """Compute the number of elements of the assembly.
 
         Returns
         -------
         int
-            The number of nodes.
+            The number of elements.
 
         """
         return self.network.number_of_nodes()
 
     def number_of_connections(self):
-        """Compute the number of connections of the model.
+        """Compute the number of connections of the assembly.
 
         Returns
         -------
@@ -103,7 +106,7 @@ class FIM(FromToData, FromToJson):
 
     @property
     def data(self):
-        """Return a data dictionary of the model.
+        """Return a data dictionary of the assembly.
         """
         # Network data does not recursively serialize to data...
         d = self.network.data
@@ -111,8 +114,8 @@ class FIM(FromToData, FromToJson):
         # so we need to trigger that for elements stored in nodes
         node = {}
         for vkey, vdata in d['node'].items():
-            node[vkey] = {key: vdata[key] for key in vdata.keys() if key != 'node'}
-            node[vkey]['node'] = vdata['node'].to_data()
+            node[vkey] = {key: vdata[key] for key in vdata.keys() if key != 'element'}
+            node[vkey]['element'] = vdata['element'].to_data()
 
         d['node'] = node
 
@@ -122,16 +125,16 @@ class FIM(FromToData, FromToJson):
     def data(self, data):
         # Deserialize elements from node dictionary
         for _vkey, vdata in data['node'].items():
-            vdata['node'] = Node.from_data(vdata['node'])
+            vdata['element'] = Element.from_data(vdata['element'])
 
         self.network = Network.from_data(data)
 
     def clear(self):
-        """Clear all the model data."""
+        """Clear all the assembly data."""
         self.network.clear()
 
-    def add_node(self, node, key=None, attr_dict={}, **kwattr):
-        """Add an element to the model.
+    def add_element(self, element, key=None, attr_dict={}, **kwattr):
+        """Add an element to the assembly.
 
         Parameters
         ----------
@@ -146,16 +149,12 @@ class FIM(FromToData, FromToJson):
             The identifier of the element.
         """
         attr_dict.update(kwattr)
-        x, y, z = node.frame.point
+        x, y, z = element.frame.point
         key = self.network.add_node(key=key, attr_dict=attr_dict,
-                                      x=x, y=y, z=z, node=node)
-        if key == 0:
-            pass
-        else:
-            self.add_edge(key-1, key)
+                                      x=x, y=y, z=z, element=element)
         return key
 
-    def add_edge(self, u, v, attr_dict=None, **kwattr):
+    def add_connection(self, u, v, attr_dict=None, **kwattr):
         """Add a connection between two elements and specify its attributes.
 
         Parameters
@@ -177,7 +176,7 @@ class FIM(FromToData, FromToJson):
         return self.network.add_edge(u, v, attr_dict, **kwattr)
 
     def transform(self, transformation):
-        """Transforms this model.
+        """Transforms this assembly.
 
         Parameters
         ----------
@@ -187,11 +186,11 @@ class FIM(FromToData, FromToJson):
         -------
         None
         """
-        for _k, node in self.nodes(data=False):
-            node.transform(transformation)
-
+        for _k, element in self.elements(data=False):
+            element.transform(transformation)
+    
     def transformed(self, transformation):
-        """Returns a transformed copy of this model.
+        """Returns a transformed copy of this assembly.
 
         Parameters
         ----------
@@ -201,25 +200,25 @@ class FIM(FromToData, FromToJson):
         -------
         Assembly
         """
-        fabrication = self.copy()
-        fabrication.transform(transformation)
-        return fabrication
-
+        assembly = self.copy()
+        assembly.transform(transformation)
+        return assembly
+    
     def copy(self):
-        """Returns a copy of this model.
+        """Returns a copy of this assembly.
         """
         raise NotImplementedError
 
-    def node(self, key, data=False):
+    def element(self, key, data=False):
         """Get an element by its key."""
         if data:
-            return self.network.node[key]['node'], self.network.node[key]
+            return self.network.node[key]['element'], self.network.node[key]
         else:
-            return self.network.node[key]['node']
+            return self.network.node[key]['element']
 
-    def nodes(self, data=False):
-        """Iterate over the elements of the model.
-
+    def elements(self, data=False):
+        """Iterate over the elements of the assembly.
+    
         Parameters
         ----------
         data : bool, optional
@@ -235,10 +234,10 @@ class FIM(FromToData, FromToJson):
         """
         if data:
             for vkey, vattr in self.network.nodes(True):
-                yield vkey, vattr['node'], vattr
+                yield vkey, vattr['element'], vattr
         else:
             for vkey in self.network.nodes(data):
-                yield vkey, self.network.node[vkey]['node']
+                yield vkey, self.network.node[vkey]['element']
 
     def connections(self, data=False):
         """Iterate over the connections of the network.
