@@ -6,19 +6,13 @@ from math import fabs
 
 import compas
 
-try:
+if not compas.IPY:
     from numpy import array
     from numpy import float64
-
     from scipy.linalg import solve
     from scipy.spatial import cKDTree
-except ImportError:
-    compas.raise_if_not_ironpython()
-
-try:
     from shapely.geometry import Polygon
-except ImportError:
-    compas.raise_if_not_ironpython()
+
 
 from compas.geometry import Frame
 from compas.geometry import local_to_world_coords_numpy

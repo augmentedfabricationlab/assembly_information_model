@@ -419,7 +419,7 @@ class Element(object):
         >>> from compas.geometry import Box
         >>> from compas.geometry import Translation
         >>> element = Element.from_box(Box(Frame.worldXY(), 1, 1, 1))
-        >>> element.transform(Translation([1, 0, 0]))
+        >>> element.transform(Translation.from_vector([1, 0, 0]))
         """
         self.frame.transform(transformation)
         if self._tool_frame:
@@ -450,7 +450,7 @@ class Element(object):
         >>> from compas.geometry import Box
         >>> from compas.geometry import Translation
         >>> element = Element.from_box(Box(Frame.worldXY(), 1, 1, 1))
-        >>> element2 = element.transformed(Translation([1, 0, 0]))
+        >>> element2 = element.transformed(Translation.from_vector([1, 0, 0]))
         """
         elem = self.copy()
         elem.transform(transformation)
