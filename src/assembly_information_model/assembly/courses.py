@@ -42,7 +42,7 @@ def assembly_with_interfaces_courses(assembly):
         while elements:
 
             nbrs = set(nbr for key in courses[-1] for nbr in assembly.network.node_neighbors(key))
-            #print(nbrs)
+            # print(nbrs)
             course = list(nbrs - seen)
             courses.append(course)
             seen.update(nbrs)
@@ -51,7 +51,8 @@ def assembly_with_interfaces_courses(assembly):
     # assign course id's to the corresponding blocks
     for i, course in enumerate(courses):
         assembly.network.nodes_attribute(name='course', value=i, keys=course)
-    #return courses
+    # return courses
+
 
 def assembly_courses(assembly, tol=0.001):
     """Identify the courses in a wall of bricks.
@@ -82,25 +83,25 @@ def assembly_courses(assembly, tol=0.001):
         z = assembly.network.node_attribute(key=e, name='z')
         if (z - c_min) ** 2 < tol:
             base.add(e)
-    #print(base)
+    # print(base)
 
     if base:
         courses.append(list(base))
 
         elements -= base
 
-        while elements: #and counter<1000:
+        while elements:  # and counter<1000:
 
             c_min = min([assembly.network.node_attribute(key=key, name='z') for key in elements])
-            #print(c_min)
+            # print(c_min)
             #base = set(assembly.network.nodes_where({'z': c_min}))
-            #print(base)
+            # print(base)
             base = set()
             for e in elements:
                 z = assembly.network.node_attribute(key=e, name='z')
                 if (z - c_min) ** 2 < tol:
                     base.add(e)
-            
+
             courses.append(list(base))
             elements -= base
 
@@ -111,6 +112,7 @@ def assembly_courses(assembly, tol=0.001):
 # ==============================================================================
 # Main
 # ==============================================================================
+
 
 if __name__ == '__main__':
     pass

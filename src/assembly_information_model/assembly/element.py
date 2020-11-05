@@ -67,8 +67,6 @@ class Element(object):
         self.trajectory = None
         self.path = []
 
-
-
     @classmethod
     def from_mesh(cls, mesh, frame):
         """Construct an element from a mesh.
@@ -144,7 +142,7 @@ class Element(object):
             New instance of element.
         """
 
-        frame = Frame([0., 0., height/2], [1, 0, 0], [0, 1, 0]) #center of the box frame
+        frame = Frame([0., 0., height/2], [1, 0, 0], [0, 1, 0])  # center of the box frame
         box = Box(frame, length, width, height)
         return cls.from_shape(box, frame)
 

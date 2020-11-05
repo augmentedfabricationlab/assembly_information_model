@@ -31,22 +31,23 @@ def _find_nearest_neighbours(cloud, nmax):
     nnbrs = [(d.flatten().tolist(), n.flatten().tolist()) for d, n in nnbrs]
     return nnbrs
 
+
 def assembly_interfaces_numpy_fromtojson(PATH_FROM,
-                              PATH_TO, 
-                              nmax=10,
-                              tmax=1e-6,
-                              amin=1e-1,
-                              lmin=1e-3,
-                              face_face=True,
-                              face_edge=False,
-                              face_vertex=False):
-    
-    
+                                         PATH_TO,
+                                         nmax=10,
+                                         tmax=1e-6,
+                                         amin=1e-1,
+                                         lmin=1e-3,
+                                         face_face=True,
+                                         face_edge=False,
+                                         face_vertex=False):
+
     # load an assembly from JSON
     from .assembly import Assembly
     assembly = Assembly.from_json(PATH_FROM)
-    assembly_interfaces_numpy(assembly,nmax=nmax,tmax=tmax,amin=amin,lmin=lmin,face_face=face_face,face_edge=face_edge,face_vertex=face_vertex)
+    assembly_interfaces_numpy(assembly, nmax=nmax, tmax=tmax, amin=amin, lmin=lmin, face_face=face_face, face_edge=face_edge, face_vertex=face_vertex)
     assembly.to_json(PATH_TO)
+
 
 def assembly_interfaces_numpy(assembly,
                               nmax=10,
@@ -169,7 +170,7 @@ def assembly_interfaces_numpy(assembly,
                         continue
 
                     nbr = assembly.element(n)
-                    #print(nbr)
+                    # print(nbr)
                     k_i = {key: index for index, key in enumerate(nbr._mesh.vertices())}
                     xyz = array(nbr._mesh.vertices_attributes('xyz'), dtype=float64).reshape((-1, 3)).T
                     rst = solve(A.T, xyz - o).T.tolist()
