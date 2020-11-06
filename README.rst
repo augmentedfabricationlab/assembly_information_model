@@ -66,6 +66,15 @@ Make sure you setup your local development environment correctly:
     invoke add-to-rhino
     pip install your_filepath_to_assembly_information_model 
 
+
+Installation in editable mode
+------------
+
+::
+
+    pip install -e your_filepath_to_assembly_information_model 
+
+
 **You're ready to start working!**
 
 During development, use tasks on the
