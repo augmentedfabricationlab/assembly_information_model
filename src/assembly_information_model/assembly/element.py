@@ -377,9 +377,9 @@ class Element(object):
             #self._mesh = _deserialize_from_data(data['_mesh'])
             self._mesh = Mesh.from_data(data['_mesh'])
         if 'trajectory' in data:
-            #from compas_fab.robots import JointTrajectory
-            #self.trajectory = JointTrajectory.from_data(data['trajectory'])
-            self.trajectory = _deserialize_from_data(data['trajectory'])
+            from compas_fab.robots import JointTrajectory
+            self.trajectory = [JointTrajectory.from_data(d) for d in data['trajectory']]
+            #self.trajectory = _deserialize_from_data(data['trajectory'])
         if 'path' in data:
             self.path = [Frame.from_data(d) for d in data['path']]
 
