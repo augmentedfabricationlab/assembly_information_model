@@ -50,7 +50,7 @@ Make sure you setup your local development environment correctly:
 ### Installation in editable mode
 
 
-    (your_env_name)  pip install -e your_filepath_to_assembly_information_model 
+    (your_env_name) pip install -e your_filepath_to_assembly_information_model 
 
 
 
