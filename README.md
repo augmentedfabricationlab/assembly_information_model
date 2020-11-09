@@ -12,14 +12,9 @@
     
     (base) conda config --add channels conda-forge
 
-#### Windows
-    (base) conda create -n your_env_name  python=3.8 compas_fab=0.13 --yes
+    (base) conda create -n your_env_name COMPAS
     (base) conda activate your_env_name 
 
-#### Mac
-    (base) conda create -n afab20 python=3.8 compas_fab=0.13 python.app --yes
-    (base) conda activate your_env_name 
-    
 
 ### Verify Installation
 
