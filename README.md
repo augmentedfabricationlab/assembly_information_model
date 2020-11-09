@@ -29,7 +29,6 @@
     Summary: Robotic fabrication package for the COMPAS Framework
 
 
-Installation
 
 Make sure you setup your local development environment correctly:
 
