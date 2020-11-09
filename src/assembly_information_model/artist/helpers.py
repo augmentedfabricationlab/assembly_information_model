@@ -114,11 +114,11 @@ class AssemblyHelper(VertexSelector,
 
 
 class ELementHelper(VertexSelector,
-                  EdgeSelector,
-                  FaceSelector,
-                  VertexModifier,
-                  EdgeModifier,
-                  FaceModifier):
+                    EdgeSelector,
+                    FaceSelector,
+                    VertexModifier,
+                    EdgeModifier,
+                    FaceModifier):
     """A block helper groups functionality for selecting and modifying assembly
     vertices, edges and faces in Rhino.
     """

@@ -67,8 +67,6 @@ class Element(object):
         self.trajectory = None
         self.path = []
 
-
-
     @classmethod
     def from_mesh(cls, mesh, frame):
         """Construct an element from a mesh.
@@ -144,7 +142,7 @@ class Element(object):
             New instance of element.
         """
 
-        frame = Frame([0., 0., height/2], [1, 0, 0], [0, 1, 0]) #center of the box frame
+        frame = Frame([0., 0., height/2], [1, 0, 0], [0, 1, 0])  # center of the box frame
         box = Box(frame, length, width, height)
         return cls.from_shape(box, frame)
 
@@ -379,9 +377,9 @@ class Element(object):
             #self._mesh = _deserialize_from_data(data['_mesh'])
             self._mesh = Mesh.from_data(data['_mesh'])
         if 'trajectory' in data:
-            #from compas_fab.robots import JointTrajectory
-            #self.trajectory = JointTrajectory.from_data(data['trajectory'])
-            self.trajectory = _deserialize_from_data(data['trajectory'])
+            from compas_fab.robots import JointTrajectory
+            self.trajectory = [JointTrajectory.from_data(d) for d in data['trajectory']]
+            #self.trajectory = _deserialize_from_data(data['trajectory'])
         if 'path' in data:
             self.path = [Frame.from_data(d) for d in data['path']]
 
@@ -419,7 +417,7 @@ class Element(object):
         >>> from compas.geometry import Box
         >>> from compas.geometry import Translation
         >>> element = Element.from_box(Box(Frame.worldXY(), 1, 1, 1))
-        >>> element.transform(Translation([1, 0, 0]))
+        >>> element.transform(Translation.from_vector([1, 0, 0]))
         """
         self.frame.transform(transformation)
         if self._tool_frame:
@@ -450,7 +448,7 @@ class Element(object):
         >>> from compas.geometry import Box
         >>> from compas.geometry import Translation
         >>> element = Element.from_box(Box(Frame.worldXY(), 1, 1, 1))
-        >>> element2 = element.transformed(Translation([1, 0, 0]))
+        >>> element2 = element.transformed(Translation.from_vector([1, 0, 0]))
         """
         elem = self.copy()
         elem.transform(transformation)

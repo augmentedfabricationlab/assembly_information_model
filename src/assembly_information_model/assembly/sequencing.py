@@ -64,7 +64,7 @@ def assembly_building_sequence(assembly, key):
         artist.redraw()
 
     """
-    
+
     course = assembly.network.node_attribute(key, 'course')
 
     if course is None:

@@ -37,17 +37,17 @@ class AssemblyArtist(NetworkArtist):
     def __init__(self, assembly, layer=None):
         super(AssemblyArtist, self).__init__(assembly, layer=layer)
         self.settings.update({
-            'color.vertex'            : (0, 0, 0),
-            'color.vertex:is_support' : (0, 0, 0),
-            'color.edge'              : (0, 0, 0),
-            'color.interface'         : (255, 255, 255),
-            'color.force:compression' : (0, 0, 255),
-            'color.force:tension'     : (255, 0, 0),
-            'color.selfweight'        : (0, 255, 0),
-            'scale.force'             : 0.1,
-            'scale.selfweight'        : 0.1,
-            'eps.selfweight'          : 1e-3,
-            'eps.force'               : 1e-3,
+            'color.vertex': (0, 0, 0),
+            'color.vertex:is_support': (0, 0, 0),
+            'color.edge': (0, 0, 0),
+            'color.interface': (255, 255, 255),
+            'color.force:compression': (0, 0, 255),
+            'color.force:tension': (255, 0, 0),
+            'color.selfweight': (0, 255, 0),
+            'scale.force': 0.1,
+            'scale.selfweight': 0.1,
+            'eps.selfweight': 1e-3,
+            'eps.force': 1e-3,
         })
 
     @property
@@ -168,9 +168,9 @@ class AssemblyArtist(NetworkArtist):
         )
         for (u, v), attr in self.assembly.edges(True):
             faces.append({
-                'points' : attr['interface_points'],
-                'name'   : "{}.interface.{}-{}".format(self.assembly.name, u, v),
-                'color'  : colordict[(u, v)]
+                'points': attr['interface_points'],
+                'name': "{}.interface.{}-{}".format(self.assembly.name, u, v),
+                'color': colordict[(u, v)]
             })
         compas_rhino.draw_faces(faces, layer=layer, clear=False, redraw=False)
 
@@ -183,25 +183,25 @@ class AssemblyArtist(NetworkArtist):
             o = attr['interface_origin']
             u, v, w = attr['interface_uvw']
             lines.append({
-                'start' : o,
-                'end'   : add_vectors(o, u),
-                'name'  : "{}.iframe.{}-{}.u".format(self.assembly.name, a, b),
-                'color' : (255, 0, 0),
-                'arrow' : 'end'
+                'start': o,
+                'end': add_vectors(o, u),
+                'name': "{}.iframe.{}-{}.u".format(self.assembly.name, a, b),
+                'color': (255, 0, 0),
+                'arrow': 'end'
             })
             lines.append({
-                'start' : o,
-                'end'   : add_vectors(o, v),
-                'name'  : "{}.iframe.{}-{}.v".format(self.assembly.name, a, b),
-                'color' : (0, 255, 0),
-                'arrow' : 'end'
+                'start': o,
+                'end': add_vectors(o, v),
+                'name': "{}.iframe.{}-{}.v".format(self.assembly.name, a, b),
+                'color': (0, 255, 0),
+                'arrow': 'end'
             })
             lines.append({
-                'start' : o,
-                'end'   : add_vectors(o, w),
-                'name'  : "{}.iframe.{}-{}.w".format(self.assembly.name, a, b),
-                'color' : (0, 0, 255),
-                'arrow' : 'end'
+                'start': o,
+                'end': add_vectors(o, w),
+                'name': "{}.iframe.{}-{}.w".format(self.assembly.name, a, b),
+                'color': (0, 0, 255),
+                'arrow': 'end'
             })
         self.draw_lines(lines, layer=layer, clear=True, redraw=True)
 
@@ -241,11 +241,11 @@ class AssemblyArtist(NetworkArtist):
             ep = sp[:]
             ep[2] += vector[2]
             lines.append({
-                'start' : sp,
-                'end'   : ep,
-                'name'  : "{}.selfweight.{}".format(self.assembly.name, key),
-                'color' : color,
-                'arrow' : 'end'
+                'start': sp,
+                'end': ep,
+                'name': "{}.selfweight.{}".format(self.assembly.name, key),
+                'color': color,
+                'arrow': 'end'
             })
         compas_rhino.draw_lines(lines, layer=layer, clear=False, redraw=False)
 
@@ -300,11 +300,11 @@ class AssemblyArtist(NetworkArtist):
                 else:
                     continue
                 lines.append({
-                    'start' : sp,
-                    'end'   : [sp[axis] + scale * f * w[axis] for axis in range(3)],
-                    'color' : color,
-                    'name'  : "{0}.force.{1}-{2}.{3}".format(self.assembly.name, a, b, i),
-                    'arrow' : 'end'
+                    'start': sp,
+                    'end': [sp[axis] + scale * f * w[axis] for axis in range(3)],
+                    'color': color,
+                    'name': "{0}.force.{1}-{2}.{3}".format(self.assembly.name, a, b, i),
+                    'arrow': 'end'
                 })
         compas_rhino.draw_lines(lines, layer=layer, clear=False, redraw=False)
 

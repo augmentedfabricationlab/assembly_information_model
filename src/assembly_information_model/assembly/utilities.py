@@ -162,16 +162,11 @@ def _deserialize_from_data(data):
     if cls is None:
         cls = getattr(__import__(module, fromlist=[attr]), attr)
 
-
     return cls.from_data(data['data'])
-
 
 
 # ==============================================================================
 # Main
 # ==============================================================================
-
 if __name__ == "__main__":
     pass
-
-

@@ -51,7 +51,7 @@ class Assembly(FromToData, FromToJson):
                  attributes=None,
                  default_element_attribute=None,
                  default_connection_attributes=None):
-        
+
         self.network = Network()
         self.network.attributes.update({'name': 'Assembly'})
 
@@ -110,21 +110,18 @@ class Assembly(FromToData, FromToJson):
         """
         # Network data does not recursively serialize to data...
         d = self.network.data
-
         # so we need to trigger that for elements stored in nodes
         node = {}
-        for vkey, vdata in d['node'].items():
+        for vkey, vdata in d['data']['node'].items():
             node[vkey] = {key: vdata[key] for key in vdata.keys() if key != 'element'}
             node[vkey]['element'] = vdata['element'].to_data()
-
-        d['node'] = node
-
+        d['data']['node'] = node
         return d
 
     @data.setter
     def data(self, data):
         # Deserialize elements from node dictionary
-        for _vkey, vdata in data['node'].items():
+        for _vkey, vdata in data['data']['node'].items():
             vdata['element'] = Element.from_data(vdata['element'])
 
         self.network = Network.from_data(data)
@@ -151,7 +148,7 @@ class Assembly(FromToData, FromToJson):
         attr_dict.update(kwattr)
         x, y, z = element.frame.point
         key = self.network.add_node(key=key, attr_dict=attr_dict,
-                                      x=x, y=y, z=z, element=element)
+                                    x=x, y=y, z=z, element=element)
         return key
 
     def add_connection(self, u, v, attr_dict=None, **kwattr):
@@ -188,7 +185,7 @@ class Assembly(FromToData, FromToJson):
         """
         for _k, element in self.elements(data=False):
             element.transform(transformation)
-    
+
     def transformed(self, transformation):
         """Returns a transformed copy of this assembly.
 
@@ -203,7 +200,7 @@ class Assembly(FromToData, FromToJson):
         assembly = self.copy()
         assembly.transform(transformation)
         return assembly
-    
+
     def copy(self):
         """Returns a copy of this assembly.
         """
@@ -218,7 +215,7 @@ class Assembly(FromToData, FromToJson):
 
     def elements(self, data=False):
         """Iterate over the elements of the assembly.
-    
+
         Parameters
         ----------
         data : bool, optional
@@ -256,4 +253,3 @@ class Assembly(FromToData, FromToJson):
 
         """
         return self.network.edges(data)
-
