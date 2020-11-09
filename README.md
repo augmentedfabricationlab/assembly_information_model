@@ -19,7 +19,7 @@
 
     (base) conda activate your_env_name
     (your_env_name) python -m compas
-#
+###
     Yay! COMPAS is installed correctly!
 
     COMPAS: 0.17.2
