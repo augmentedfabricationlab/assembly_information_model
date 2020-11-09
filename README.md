@@ -35,8 +35,6 @@ Make sure you setup your local development environment correctly:
 * Clone the `assembly_information_model <https://github.com/augmentedfabricationlab/assembly_information_model>`_ repository.
 * Install development dependencies and make the project accessible from Rhino (change to repository directory in the Anaconda prompt):
 
-::
-
     pip install -r requirements-dev.txt
     invoke add-to-rhino
     pip install your_filepath_to_assembly_information_model 
@@ -45,14 +43,11 @@ Make sure you setup your local development environment correctly:
 ### Installation in editable mode
 
 
-::
-
     pip install -e your_filepath_to_assembly_information_model 
 
 
 
-Credits
--------------
+## Credits
 
 This package was created by `Kathrin Doerfler <doerfler@tum.de>`_ `@kathrindoerfler <https://github.com/kathrindoerfler>`_ at `@augmentedfabricationlab <https://github.com/augmentedfabricationlab>`_. This package is based on `compas_assembly <https://github.com/BlockResearchGroup/compas_assembly>`_ by `@BlockResearchGroup <https://github.com/BlockResearchGroup>`_
 
