@@ -3,30 +3,37 @@
 
 ## Requirements
 
-* Minimum OS: **Windows 10 Pro** or **Mac OS Sierra 10.12**
-* [Rhinoceros 3D 6.0](https://www.rhino3d.com/)
-* [Anaconda 3](https://www.anaconda.com/products/individual)
-* Git: [official command-line client](https://git-scm.com/) and visual GUI (e.g. [Github Desktop](https://desktop.github.com/))
-* [VS Code](https://code.visualstudio.com/) with the following `Extensions`:
-  * `Python` (official extension)
-
+* COMPAS
 
 ## Installation
 
 ### Compas Installation 
 (via your Anaconda Terminal)
     
-    (base)  conda config --add channels conda-forge
-    (base)  conda create -n afab20 python=3.8 compas_fab=0.13 --yes
-    (base)  conda activate afab20
-    (afab20) python -m compas_rhino.install -v 6.0 -p compas compas_ghpython compas_rhino
+    (base) conda config --add channels conda-forge
+
+#### Windows
+    (base) conda create -n your_env_name  python=3.8 compas_fab=0.13 --yes
+    (base) conda activate your_env_name 
+
+#### Mac
+    (base) conda create -n afab20 python=3.8 compas_fab=0.13 python.app --yes
+    (base) conda activate your_env_name 
     
+
 ### Verify Installation
 
-    (afab20) pip show compas_fab
+    (your_env_name) pip show compas_fab
     Name: compas-fab
     Version: 0.13.1
     Summary: Robotic fabrication package for the COMPAS Framework
+    ...
+
+### Install on Rhino
+
+    (your_env_name) python -m compas_rhino.install
+
+NOTE: This installs to Rhino 6.0, use `-v 5.0` if needed.
 
 
 
@@ -43,7 +50,8 @@ Make sure you setup your local development environment correctly:
 ### Installation in editable mode
 
 
-    pip install -e your_filepath_to_assembly_information_model 
+    (your_env_name)  pip install -e your_filepath_to_assembly_information_model 
+
 
 
 
