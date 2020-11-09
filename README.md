@@ -11,18 +11,19 @@
 (via your Anaconda Terminal)
     
     (base) conda config --add channels conda-forge
-
     (base) conda create -n your_env_name COMPAS
-    (base) conda activate your_env_name 
+ 
 
 
 ### Verify Installation
 
-    (your_env_name) pip show compas_fab
-    Name: compas-fab
-    Version: 0.13.1
-    Summary: Robotic fabrication package for the COMPAS Framework
-    ...
+    (base) conda activate your_env_name
+    (your_env_name) python -m compas
+#
+    Yay! COMPAS is installed correctly!
+
+    COMPAS: 0.17.2
+    Python: 3.8.6 | packaged by conda-forge | (default, Oct  7 2020, 18:22:52) [MSC v.1916 64 bit (AMD64)]   
 
 ### Install on Rhino
 
