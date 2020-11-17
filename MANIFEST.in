@@ -3,6 +3,7 @@ graft src
 graft tests
 
 prune .github
+prunt README.md
 
 include .bumpversion.cfg
 include .editorconfig
@@ -11,7 +12,6 @@ include AUTHORS.rst
 include CHANGELOG.rst
 include CONTRIBUTING.rst
 include LICENSE
-include README.rst
 
 include requirements-dev.txt tasks.py pytest.ini
 
