@@ -10,8 +10,10 @@
 ### Compas Installation 
 (via your Anaconda Terminal)
     
-    (base) conda config --add channels conda-forge
-    (base) conda create -n your_env_name COMPAS
+    (base)  conda config --add channels conda-forge
+    (base)  conda create -n your_env_name python=3.8 compas=0.15.6 --yes
+    (base)  conda activate your_env_name
+    (your_env_name) python -m compas_rhino.install -v 6.0 -p compas compas_ghpython compas_rhino
  
 
 
@@ -35,12 +37,12 @@ NOTE: This installs to Rhino 6.0, use `-v 5.0` if needed.
 
 Make sure you setup your local development environment correctly:
 
-* Clone the `assembly_information_model <https://github.com/augmentedfabricationlab/assembly_information_model>`_ repository.
+* Clone the [assembly_information_model] (https://github.com/augmentedfabricationlab/assembly_information_model) repository.
 * Install development dependencies and make the project accessible from Rhino (change to repository directory in the Anaconda prompt):
 
-    pip install -r requirements-dev.txt
-    invoke add-to-rhino
-    pip install your_filepath_to_assembly_information_model 
+    `pip install -r requirements-dev.txt`
+    `invoke add-to-rhino`
+    `pip install your_filepath_to_assembly_information_model`
 
 
 ### Installation in editable mode
@@ -53,6 +55,6 @@ Make sure you setup your local development environment correctly:
 
 ## Credits
 
-This package was created by `Kathrin Doerfler <doerfler@tum.de>`_ `@kathrindoerfler <https://github.com/kathrindoerfler>`_ at `@augmentedfabricationlab <https://github.com/augmentedfabricationlab>`_. This package is based on `compas_assembly <https://github.com/BlockResearchGroup/compas_assembly>`_ by `@BlockResearchGroup <https://github.com/BlockResearchGroup>`_
+This package was created by [Kathrin Doerfler](doerfler@tum.de>) [@kathrindoerfler](https://github.com/kathrindoerfler) at [@augmentedfabricationlab](https://github.com/augmentedfabricationlab). This package is based on [compas_assembly](https://github.com/BlockResearchGroup/compas_assembly) by [@BlockResearchGroup](https://github.com/BlockResearchGroup)
 
 
