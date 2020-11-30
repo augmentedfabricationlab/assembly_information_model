@@ -16,13 +16,11 @@
  
 ### Verify Installation
 
-    (base) conda activate your_env_name
-    (your_env_name) python -m compas
-###
-    Yay! COMPAS is installed correctly!
-
-    COMPAS: 0.16.5
-    Python: 3.8.2 | packaged by conda-forge | (default, Apr 24 2020, 07:56:27) [Clang 9.0.1 ]     
+    (your_env_name) python
+    >>> import compas
+    >>> compas.__version__
+    '0.15.6'
+    >>> exit()    
 
 ### Install on Rhino
 
@@ -35,6 +33,8 @@ Make sure you setup your local development environment correctly:
 
 * Clone the [assembly_information_model](https://github.com/augmentedfabricationlab/assembly_information_model) repository.
 * Install development dependencies and make the project accessible from Rhino (change to repository directory in the Anaconda prompt):
+
+###
 
     pip install -r requirements-dev.txt  
     invoke add-to-rhino  
