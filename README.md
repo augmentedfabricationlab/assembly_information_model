@@ -1,5 +1,6 @@
 # Assembly Information Model
 
+This repository provides datastructures, tools and methods for assembly information modeling.
 
 ## Requirements
 
@@ -50,6 +51,6 @@ Make sure you setup your local development environment correctly:
 
 ## Credits
 
-This package was created by [Kathrin Doerfler](doerfler@tum.de>) [@kathrindoerfler](https://github.com/kathrindoerfler) at [@augmentedfabricationlab](https://github.com/augmentedfabricationlab). This package is based on [compas_assembly](https://github.com/BlockResearchGroup/compas_assembly) by [@BlockResearchGroup](https://github.com/BlockResearchGroup)
+This package was created by [Kathrin Doerfler](doerfler@tum.de) [@kathrindoerfler](https://github.com/kathrindoerfler) at [@augmentedfabricationlab](https://github.com/augmentedfabricationlab). This package is based on [compas_assembly](https://github.com/BlockResearchGroup/compas_assembly) by [@BlockResearchGroup](https://github.com/BlockResearchGroup)
 
 
