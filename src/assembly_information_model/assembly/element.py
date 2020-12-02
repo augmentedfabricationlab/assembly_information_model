@@ -228,9 +228,13 @@ class Element(object):
         self._tool_frame = frame.copy()
 
     @property
-    def pose_quaternion(self):
+    def tool_frame_pose_quaternion(self):
         """ formats the element's tool frame to a pose quaternion and returns the pose"""
-        return list(self._tool_frame.point) + list(self._tool_frame.quaternion)
+        return list(self.tool_frame.point) + list(self.tool_frame.quaternion)
+
+    @tool_frame_pose_quaternion.setter
+    def tool_frame_pose_quaternion(self, pose_quaternion):
+        self.tool_frame = Frame.from_quaternion(pose_quaternion[3:], point=pose_quaternion[:3])
 
     @property
     def centroid(self):
