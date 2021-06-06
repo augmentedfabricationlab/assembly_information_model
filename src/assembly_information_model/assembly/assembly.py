@@ -49,7 +49,7 @@ class Assembly(FromToData, FromToJson):
     def __init__(self,
                  elements=None,
                  attributes=None,
-                 default_element_attribute=None,
+                 default_element_attributes=None,
                  default_connection_attributes=None):
 
         self.network = Network()
@@ -63,8 +63,8 @@ class Assembly(FromToData, FromToJson):
             'is_placed': False
         })
 
-        if default_element_attribute is not None:
-            self.network.default_node_attributes.update(default_element_attribute)
+        if default_element_attributes is not None:
+            self.network.default_node_attributes.update(default_element_attributes)
 
         if default_connection_attributes is not None:
             self.network.default_edge_attributes.update(default_connection_attributes)
