@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import division
 
 import json
+import compas
 
 try:
     basestring
@@ -103,9 +104,12 @@ class FromToJson(object):
         """
         with open(filepath, 'w+') as fp:
             if pretty:
-                json.dump(self.data, fp, sort_keys=True, indent=4)
+                #json.dump(self.data, fp, sort_keys=True, indent=4) # old
+                compas.json_dump(self.data, fp, pretty=True)
             else:
-                json.dump(self.data, fp)
+                #json.dump(self.data, fp) # old:
+                compas.json_dump(self.data, fp)
+
 
 
 class FromToPickle(object):
