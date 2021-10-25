@@ -2,9 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
 import json
-from copy import deepcopy
+
 from compas.datastructures import Network
 
 from .element import Element
@@ -113,16 +112,16 @@ class Assembly(FromToData, FromToJson):
         d = self.network.data
         # so we need to trigger that for elements stored in nodes
         node = {}
-        for vkey, vdata in d['node'].items():
+        for vkey, vdata in d['data']['node'].items():
             node[vkey] = {key: vdata[key] for key in vdata.keys() if key != 'element'}
             node[vkey]['element'] = vdata['element'].to_data()
-        d['node'] = node
+        d['data']['node'] = node
         return d
 
     @data.setter
     def data(self, data):
         # Deserialize elements from node dictionary
-        for _vkey, vdata in data['node'].items():
+        for _vkey, vdata in data['data']['node'].items():
             vdata['element'] = Element.from_data(vdata['element'])
 
         self.network = Network.from_data(data)
@@ -205,8 +204,7 @@ class Assembly(FromToData, FromToJson):
     def copy(self):
         """Returns a copy of this assembly.
         """
-        cls = type(self)
-        return cls.from_data(deepcopy(self.data))
+        raise NotImplementedError
 
     def element(self, key, data=False):
         """Get an element by its key."""
