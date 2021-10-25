@@ -199,11 +199,12 @@ class Assembly(FromToData, FromToJson):
         """
         assembly = self.copy()
         assembly.transform(transformation)
+        assembly.network.transform(transformation)
         return assembly
 
     def copy(self):
         """Returns a copy of this assembly.
-        """   
+        """
         cls = type(self)
         return cls.from_data(deepcopy(self.data))
 
