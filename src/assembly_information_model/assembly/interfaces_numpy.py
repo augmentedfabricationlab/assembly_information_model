@@ -195,7 +195,7 @@ def assembly_interfaces_numpy(assembly,
 
                             if area >= amin:
                                 coords = [[x, y, 0.0] for x, y, z in intersection.exterior.coords]
-                                coords = local_to_world_coords_numpy(Frame(o, A[0], A[1]), coords)
+                                coords = local_to_world_coordinates_numpy(Frame(o, A[0], A[1]), coords)
 
                                 attr = {
                                     'interface_type': 'face_face',
