@@ -15,7 +15,7 @@ if not compas.IPY:
 
 
 from compas.geometry import Frame
-from compas.geometry import local_to_world_coords_numpy
+from compas.geometry import local_to_world_coordinates_numpy
 # from compas.geometry import project_points_plane
 # from compas.geometry import centroid_points
 
