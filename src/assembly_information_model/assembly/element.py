@@ -25,7 +25,7 @@ __all__ = ['Element']
 
 
 class Element(object):
-    """Data structure representing a discrete elements of an assembly.
+    """Data structure representing a discrete element of an assembly.
 
     Attributes
     ----------
