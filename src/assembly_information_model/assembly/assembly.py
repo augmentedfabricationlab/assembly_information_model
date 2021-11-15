@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import json
+import os
 from copy import deepcopy
 from compas.datastructures import Network, network
 
@@ -255,3 +256,14 @@ class Assembly(FromToData, FromToJson):
 
         """
         return self.network.edges(data)
+
+    def export_to_json_for_xr(self, path, is_built=False):
+
+        self.network.update_default_node_attributes({"is_built":False,"idx_v":None,"custom_attr_1":None,"custom_attr_2":None,"custom_attr_3":None})
+
+        for key, element in self.elements():
+            idx_v = self.network.node_attribute(key, "course")
+            self.network.node_attribute(key, "idx_v", idx_v)
+            self.network.node_attribute(key, "is_built", is_built)
+
+        self.to_json(path)
