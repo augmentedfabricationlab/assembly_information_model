@@ -198,7 +198,7 @@ def add_to_rhino(ctx):
     try:
         python_source_path = os.path.join(os.getcwd(), 'src')
         rhino_setting_per_version = [
-            ('5.0', 'settings.xml'), ('6.0', 'settings-Scheme__Default.xml')]
+            ('5.0', 'settings.xml'), ('6.0', 'settings-Scheme__Default.xml'), ('7.0', 'settings-Scheme__Default.xml')]
         setting_files_updated = 0
 
         for version, filename in rhino_setting_per_version:
