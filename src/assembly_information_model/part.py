@@ -88,7 +88,8 @@ class Part(Datastructure):
             New instance of part.
         """
         part = cls(name, frame)
-        part.attributes.update({'mesh':mesh})
+        part.mesh = mesh
+
         return part
 
     @classmethod
@@ -109,11 +110,12 @@ class Part(Datastructure):
         :class:`Part`
             New instance of part.
         """
-
         part = cls(name, frame) 
         mesh = Mesh.from_shape(shape)
 
-        part.attributes.update({'shape':shape, 'mesh':mesh})
+        part.mesh = mesh
+        part.shape = shape
+
         return part
 
     @property
@@ -216,6 +218,49 @@ class Part(Datastructure):
         v = volume_polyhedron((vertices, faces))
         return v
 
+    @property
+    def mesh(self):
+        """Returns the mesh of the part, if available.
+
+        Returns
+        -------
+        :class:`Mesh`
+        """
+
+        if 'mesh' in self.attributes.keys():
+            return self.attributes['mesh']
+    
+    @mesh.setter
+    def mesh(self, mesh):
+        """Sets the mesh of the part, if available.
+
+        Parameters
+        ----------
+        :class:`Mesh`
+        """
+        self.attributes.update({'mesh':mesh})
+
+    @property
+    def shape(self):
+        """Returns the shape of the part, if available.
+
+        Returns
+        -------
+        :class:`Shape`
+        """
+
+        if 'shape' in self.attributes.keys():
+            return self.attributes['shape']
+    
+    @shape.setter
+    def shape(self, shape):
+        """Sets the shape of the part, if available.
+
+        Parameters
+        ----------
+        :class:`Shape`
+        """
+        self.attributes.update({'shape':shape})
     def transform(self, T):
         """Transforms the element.
 
@@ -281,45 +326,3 @@ class Part(Datastructure):
             part.attributes.update({'shape':self.attributes['shape'].copy()})
 
         return part
-    
-    @property
-    def get_mesh(self):
-        """Returns the mesh of the part, if available.
-
-        Returns
-        -------
-        :class:`Mesh`
-        """
-
-        if 'mesh' in self.attributes.keys():
-            return self.attributes['mesh']
-    
-    def set_mesh(self, mesh):
-        """Sets the mesh of the part, if available.
-
-        Parameters
-        ----------
-        :class:`Mesh`
-        """
-        self.attributes.update({'mesh':mesh})
-
-    @property
-    def get_shape(self):
-        """Returns the shape of the part, if available.
-
-        Returns
-        -------
-        :class:`Shape`
-        """
-
-        if 'shape' in self.attributes.keys():
-            return self.attributes['shape']
-        
-    def set_shape(self, shape):
-        """Sets the shape of the part, if available.
-
-        Parameters
-        ----------
-        :class:`Shape`
-        """
-        self.attributes.update({'shape':shape})
