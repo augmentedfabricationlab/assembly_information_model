@@ -1,52 +1,58 @@
-# Assembly Information Model
+# Assembly Information Model (Compas 2 version)
 
-This repository provides datastructures, tools and methods for assembly information modeling.
+This repository provides data structures, tools and methods for assembly information modeling.
 
 ## Requirements
 
-* COMPAS
+* Windows 10 Professional
+* Rhino 8 / Grasshopper
+* [Anaconda Python](https://www.anaconda.com/download)
+* [Visual Studio Code](https://code.visualstudio.com/)
+* [Github Desktop](https://desktop.github.com/)
+* potentially: [Microsoft Visual C++](https://www.scivision.dev/python-windows-visual-c-14-required/)
 
 ## Installation
 
-### Compas Installation 
-(via your Anaconda Terminal)
+#### Installation COMPAS FAB
     
-    (base)  conda config --add channels conda-forge
-    (base)  conda create -n your_env_name python=3.8 compas=0.16.5 --yes
+    (base)  conda create -n your_env_name -c conda-forge compas_fab
+    (base)  conda activate your_env_name
 
- 
-### Verify Installation
+#### Verify Installation of COMPAS FAB
 
-    (your_env_name) python
-    >>> import compas
-    >>> compas.__version__
-    '0.15.6'
-    >>> exit()    
+    (your_env_name) python -m compas_fab
+    Yay! COMPAS FAB is installed correctly!   
 
-### Install on Rhino
+#### Installation of COMPAS FAB on Rhino from PyPI
 
-    (your_env_name) python -m compas_rhino.install
-
-NOTE: This installs to Rhino 6.0, use `-v 5.0` if needed.
+    (your_env_name) python -m compas_rhino.print_python_path
+    (your_env_name) C:\Users\your_user_name\.rhinocode\py39-rh8\python.exe -m pip install compas_fab
 
 
-Make sure you setup your local development environment correctly:
+Make sure you set up your local development environment correctly:
 
 * Clone the [assembly_information_model](https://github.com/augmentedfabricationlab/assembly_information_model) repository.
+* Change to the branch 'compas2'!!!!!!!!
 * Install development dependencies and make the project accessible from Rhino (change to repository directory in the Anaconda prompt):
 
-###
+#### Making the AIM repository accessible in Rhino 8
 
-    pip install -r requirements-dev.txt  
-    invoke add-to-rhino  
-    pip install your_filepath_to_assembly_information_model
+Find the Rhino 8 Python executable by running the following in a terminal or command prompt:
+
+    (your_env_name) python -m compas_rhino.print_python_path
+
+Your Rhino 8 Python path should look something like this:
+
+    C:\Users\your_user_name\.rhinocode\py39-rh8\python.exe
+    
+Then you can pip install all dependencies using the file path of the Rhino 8 Python executable:
+
+    (your_env_name) your_py39-rh8_path -m pip install your_filepath_to_assembly_information_model
 
 
-### Installation in editable mode
+In editable mode:
 
-
-    (your_env_name) pip install -e your_filepath_to_assembly_information_model
-
+    (your_env_name) your_py39-rh8_path pip install -e your_filepath_to_assembly_information_model
 
 
 ## Credits
