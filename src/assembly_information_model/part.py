@@ -261,6 +261,7 @@ class Part(Datastructure):
         :class:`Shape`
         """
         self.attributes.update({'shape':shape})
+        
     def transform(self, T):
         """Transforms the element.
 
