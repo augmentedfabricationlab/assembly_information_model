@@ -177,6 +177,16 @@ class Assembly(Datastructure):
         """
         for node in self.graph.nodes():
             yield self.graph.node_attribute(node, "part")
+            
+    def part_keys(self):
+        """The keys of the parts in the assembly.  
+        Yields
+        ------
+        int | str
+            The keys of the parts in the assembly.
+        """ 
+        for node in self.graph.nodes():
+            yield node
 
     def connections(self, data=False):
         """Iterate over the connections between the parts.
