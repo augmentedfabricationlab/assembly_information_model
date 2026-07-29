@@ -16,18 +16,18 @@ None/NaN if ungraded) plus a `bin` label like "000" (matching its (i, j, k)
 grid index), so scores from an external grader can be dropped in directly as
 long as its cell ordering is mapped to the same (i, j, k) convention.
 
-CellularizedPart does not assume the part is a brick / box:
-
 - If the part's `shape` is an exact :class:`compas.geometry.Box` (e.g. a
   brick), the grid subdivides that box directly and every cell is `active`
   (the box is fully solid within its own bounding box).
 - Otherwise (an arbitrary mesh, or a non-box shape), the grid subdivides the
   *bounding box* of the part's mesh, and each cell is tested against the
-  actual mesh (by ray-casting containment of the cell's centroid) and marked
-  `active=False` if it falls outside the mesh. The set of active cells then
-  approximates the part's real, possibly irregular, volume rather than its
-  plain bounding box -- a voxelization at the resolution of the chosen grid,
-  not an exact boolean clip.
+  actual mesh and marked `active=False` if it falls outside. By default
+  (``box_mode=True``) this is a cheap voxelization -- containment of the
+  cell's centroid only, every cell stays a plain grid box, active or not. With
+  ``box_mode=False``, each cell is instead clipped (pure-compas half-space
+  clipping, no boolean-mesh dependency) against the part's actual mesh, and
+  the exact irregular result is stored as that cell's `cell_mesh` attribute
+  -- the real geometry subdivided into cells, not a box approximation.
 
 This is intentionally decoupled from ROS/torch/BlenderProc/etc -- it only
 depends on compas, so it can be unit tested standalone.
@@ -98,6 +98,143 @@ def _point_in_mesh(point, mesh, direction=None, tol=1e-9):
     return count % 2 == 1
 
 
+def _clip_polygon_halfspace(polygon, plane_point, plane_normal, tol=1e-9):
+    """Sutherland-Hodgman clip of a single planar polygon against a half-space.
+
+    Keeps the side where ``dot(plane_normal, p - plane_point) <= tol``, i.e.
+    `plane_normal` is the *outward* direction of the half-space being cut away.
+
+    Parameters
+    ----------
+    polygon : list[[float, float, float]]
+        Ordered polygon vertices (assumed planar).
+    plane_point : [float, float, float]
+    plane_normal : [float, float, float]
+    tol : float, optional
+
+    Returns
+    -------
+    list[[float, float, float]]
+        The clipped polygon, possibly empty (fully outside) or unchanged
+        (fully inside).
+    """
+    n = len(polygon)
+    if n == 0:
+        return []
+
+    dists = [dot_vectors(subtract_vectors(p, plane_point), plane_normal) for p in polygon]
+    result = []
+    for i in range(n):
+        cur_pt, cur_d = polygon[i], dists[i]
+        nxt_pt, nxt_d = polygon[(i + 1) % n], dists[(i + 1) % n]
+        cur_inside = cur_d <= tol
+        if cur_inside:
+            result.append(cur_pt)
+        if cur_inside != (nxt_d <= tol):
+            t = cur_d / (cur_d - nxt_d)
+            result.append(add_vectors(cur_pt, scale_vector(subtract_vectors(nxt_pt, cur_pt), t)))
+    return result
+
+
+def _clip_mesh_by_plane(mesh, plane_point, plane_normal, tol=1e-9, precision=9):
+    """Clip a closed mesh against a single half-space, capping the cut.
+
+    Every face is clipped independently (via :func:`_clip_polygon_halfspace`),
+    cut vertices are welded by rounded coordinate, and the resulting open
+    boundary loop(s) -- the intersection of the mesh surface with the cutting
+    plane -- are capped with new planar faces so the result stays closed.
+
+    A single-plane cut always leaves a boundary that lies entirely on that
+    one plane, so each loop is safely planar and can be filled with one new
+    face. That stops being true once several planes have cut through the same
+    corner at once (their combined boundary is no longer planar) -- which is
+    why cutting by more than one plane must go one plane at a time, capping
+    in between, rather than clipping every plane first and capping once.
+
+    Parameters
+    ----------
+    mesh : :class:`compas.datastructures.Mesh`
+        Must be closed (watertight) for the cap to be well-defined.
+    plane_point : [float, float, float]
+    plane_normal : [float, float, float]
+        Outward direction of the half-space being cut away.
+    tol : float, optional
+    precision : int, optional
+        Decimal rounding used to weld coincident cut vertices.
+
+    Returns
+    -------
+    :class:`compas.datastructures.Mesh`
+        A new, possibly empty (no faces left), closed mesh.
+    """
+    clipped = Mesh()
+    vertex_map = {}
+
+    def get_vertex(point):
+        key = tuple(round(c, precision) for c in point)
+        if key not in vertex_map:
+            vertex_map[key] = clipped.add_vertex(x=point[0], y=point[1], z=point[2])
+        return vertex_map[key]
+
+    for fkey in mesh.faces():
+        polygon = _clip_polygon_halfspace(mesh.face_coordinates(fkey), plane_point, plane_normal, tol=tol)
+        if len(polygon) < 3:
+            continue
+        face_vertices = [get_vertex(p) for p in polygon]
+        face_vertices = [v for i, v in enumerate(face_vertices) if v != face_vertices[i - 1]]
+        if len(face_vertices) >= 3:
+            clipped.add_face(face_vertices)
+
+    for loop in clipped.vertices_on_boundaries():
+        # `vertices_on_boundaries` returns each loop closed (first vertex
+        # repeated at the end); drop the repeat and use the winding as-is --
+        # it's already the correct orientation to fill the hole.
+        loop = loop[:-1] if len(loop) > 1 and loop[0] == loop[-1] else loop
+        if len(loop) >= 3:
+            clipped.add_face(loop)
+
+    return clipped
+
+
+def _slice_mesh(mesh, origin, axis, offsets, tol=1e-9):
+    """Split a closed mesh into ``len(offsets) + 1`` closed slabs along one axis.
+
+    Slices incrementally (clip off the lowest slab, keep clipping what
+    *remains*) rather than re-clipping the full mesh against every offset
+    independently -- each original face only ever gets processed by the
+    handful of slabs it actually straddles, not by every slab in the grid.
+    That's what makes slicing a whole nx*ny*nz grid cost roughly one pass
+    over the mesh rather than O(cells x mesh faces).
+
+    Parameters
+    ----------
+    mesh : :class:`compas.datastructures.Mesh`
+    origin : [float, float, float]
+        A point with local coordinate 0 along `axis` (e.g. a box's frame
+        origin -- must be consistent with how `offsets` were measured).
+    axis : [float, float, float]
+        Unit vector along which to slice; slabs are ordered low-to-high.
+    offsets : list[float]
+        Sorted interior cut distances from `origin` along `axis` (the grid's
+        interior breakpoints for this axis -- not the two outer bounds).
+    tol : float, optional
+
+    Returns
+    -------
+    list[:class:`compas.datastructures.Mesh`]
+        ``len(offsets) + 1`` closed slabs, low to high along `axis`.
+    """
+    slabs = []
+    remaining = mesh
+    for offset in offsets:
+        point = add_vectors(origin, scale_vector(axis, offset))
+        low = _clip_mesh_by_plane(remaining, point, axis, tol=tol)
+        remaining = _clip_mesh_by_plane(remaining, point, scale_vector(axis, -1), tol=tol)
+        slabs.append(low)
+    slabs.append(remaining)
+    return slabs
+
+
 class PartCellNetwork(CellNetwork):
     """A :class:`compas.datastructures.CellNetwork` used to store a
     :class:`CellularizedPart`'s per-cell grid.
@@ -124,7 +261,16 @@ class PartCellNetwork(CellNetwork):
         """Cell keys flagged `active` (part of the part's actual shape)."""
         return [ckey for ckey in self.cells() if self.cell_attribute(ckey, "active")]
 
-    def build_cell_grid(self, box, grid=(2, 2, 2), mesh=None, tol=1e-6):
+    def cell_mesh(self, cell):
+        """The cell's clipped irregular mesh, if built with ``box_mode=False``.
+
+        Returns
+        -------
+        :class:`compas.datastructures.Mesh` | None
+        """
+        return self.cell_attribute(cell, "cell_mesh")
+
+    def build_cell_grid(self, box, grid=(2, 2, 2), mesh=None, tol=1e-6, box_mode=True):
         """Fill this (empty) network with a regular grid of hexahedral
         cells subdividing `box`, in `box`'s own frame.
 
@@ -134,21 +280,27 @@ class PartCellNetwork(CellNetwork):
             Reference box whose volume is subdivided into the grid. For a
             box-shaped part (e.g. a brick) this is the part's own exact
             shape. For an irregular part, pass its bounding box instead
-            (e.g. ``part.mesh.compute_aabb()``).
+            (e.g. ``part.mesh.aabb()``).
         grid : tuple[int, int, int], optional
             Number of subdivisions along the box's local (x, y, z) axes,
             e.g. (2, 2, 2) -> 8 cells, (4, 2, 2) / (2, 2, 4) -> 16 cells.
         mesh : :class:`compas.datastructures.Mesh`, optional
-            If given, each cell is tested against this mesh (by ray-casting
-            containment of the cell's centroid) and flagged inactive if its
-            centroid falls outside the mesh. Use this for irregular / non-box
-            shapes so the active cells approximate the mesh's actual
-            (possibly irregular) volume rather than its plain bounding box.
-            This is a voxelization at the resolution of `grid`, not an exact
-            boolean clip: cells straddling the mesh boundary are kept or
-            dropped based on their centroid only.
+            If given, each cell is tested against this mesh. Use this for
+            irregular / non-box shapes so the active cells approximate the
+            mesh's actual (possibly irregular) volume rather than its plain
+            bounding box.
         tol : float, optional
-            Tolerance forwarded to the containment ray-cast.
+            Tolerance forwarded to the containment ray-cast / clipping.
+        box_mode : bool, optional
+            True (default): a cell is `active` if its centroid falls inside
+            `mesh` (or always active if `mesh` is None) -- a cheap
+            voxelization where every cell is a plain grid box, active or not.
+            False: additionally clip `mesh` against each cell's own 6
+            half-spaces (pure-compas, no boolean-mesh dependency) and store
+            the exact result as the cell's `cell_mesh` attribute -- the
+            actual part geometry subdivided into irregular cells, rather than
+            a box approximation. A cell is `active` if that clip is
+            non-empty. Slower, and only meaningful when `mesh` is given.
 
         Returns
         -------
@@ -170,6 +322,21 @@ class PartCellNetwork(CellNetwork):
                 for k, z in enumerate(zs):
                     wx, wy, wz = box.frame.to_world_coordinates([x, y, z])
                     vids[(i, j, k)] = self.add_vertex(x=wx, y=wy, z=wz)
+
+        # slice the whole grid up front (hierarchically: x-slabs, each split
+        # into y-rows, each split into z-cells) instead of re-clipping the
+        # full mesh against every individual cell from scratch -- each face
+        # only gets processed by the slabs it actually straddles this way.
+        cell_meshes = None
+        if not box_mode and mesh is not None:
+            cell_meshes = {}
+            x_slabs = _slice_mesh(mesh, box.frame.point, box.frame.xaxis, xs[1:-1], tol=tol)
+            for i, x_slab in enumerate(x_slabs):
+                y_slabs = _slice_mesh(x_slab, box.frame.point, box.frame.yaxis, ys[1:-1], tol=tol)
+                for j, y_slab in enumerate(y_slabs):
+                    z_slabs = _slice_mesh(y_slab, box.frame.point, box.frame.zaxis, zs[1:-1], tol=tol)
+                    for k, z_slab in enumerate(z_slabs):
+                        cell_meshes[(i, j, k)] = z_slab
 
         for i, j, k in itertools.product(range(nx), range(ny), range(nz)):
             v000 = vids[(i, j, k)]
@@ -197,7 +364,11 @@ class PartCellNetwork(CellNetwork):
             self.cell_attribute(ckey, "bin", "".join(str(v) for v in ijk))
             self.cell_attribute(ckey, "damage_score", None)
 
-            if mesh is not None:
+            if not box_mode and mesh is not None:
+                cell_mesh = cell_meshes[(i, j, k)]
+                self.cell_attribute(ckey, "cell_mesh", cell_mesh)
+                active = cell_mesh.number_of_faces() > 0
+            elif mesh is not None:
                 active = _point_in_mesh(self.cell_centroid(ckey), mesh, tol=tol)
             else:
                 active = True
@@ -210,8 +381,7 @@ class PartCellNetwork(CellNetwork):
 class CellularizedPart(Part):
     """A Part with an attached :class:`PartCellNetwork` cell grid.
 
-    Does not assume the part is a brick: pass a `shape` (e.g. a
-    :class:`compas.geometry.Box` for a brick) and/or a `mesh`. If `shape` is
+    Pass a `shape` (e.g. a :class:`compas.geometry.Box` for a brick) and/or a `mesh`. If `shape` is
     an exact `Box`, the grid subdivides it directly. Otherwise, the grid
     subdivides the bounding box of `mesh` and cells outside the actual mesh
     are deactivated -- see :meth:`PartCellNetwork.build_cell_grid`.
@@ -226,11 +396,15 @@ class CellularizedPart(Part):
     grid : tuple[int, int, int], optional
         Number of subdivisions along (x, y, z). Default (2, 2, 2) -> 8
         cells.
+    box_mode : bool, optional
+        True (default): cells are plain grid boxes, flagged active/inactive
+        by containment. False: cells are clipped to the part's actual mesh
+        geometry -- see :meth:`PartCellNetwork.build_cell_grid`.
     name : str, optional
     frame : :class:`compas.geometry.Frame`, optional
     """
 
-    def __init__(self, shape=None, mesh=None, grid=(2, 2, 2), name=None, frame=None, **kwargs):
+    def __init__(self, shape=None, mesh=None, grid=(2, 2, 2), box_mode=True, name=None, frame=None, **kwargs):
         super(CellularizedPart, self).__init__(name=name, frame=frame, **kwargs)
 
         if shape is not None:
@@ -242,11 +416,12 @@ class CellularizedPart(Part):
             raise ValueError("CellularizedPart needs a `shape` and/or a `mesh` to build its cell grid from.")
 
         self.attributes["grid"] = tuple(grid)
+        self.attributes["box_mode"] = box_mode
         self.cell_network = PartCellNetwork()
-        self.build_cell_grid(grid=grid)
+        self.build_cell_grid(grid=grid, box_mode=box_mode)
 
     @classmethod
-    def from_box(cls, size, grid=(2, 2, 2), name=None, frame=None, **kwargs):
+    def from_box(cls, size, grid=(2, 2, 2), box_mode=True, name=None, frame=None, **kwargs):
         """Convenience constructor for a box-shaped part, e.g. a brick.
 
         Parameters
@@ -254,6 +429,7 @@ class CellularizedPart(Part):
         size : tuple[float, float, float]
             Box (length, width, height).
         grid : tuple[int, int, int], optional
+        box_mode : bool, optional
         name : str, optional
         frame : :class:`compas.geometry.Frame`, optional
 
@@ -263,31 +439,80 @@ class CellularizedPart(Part):
         """
         frame = frame or Frame.worldXY()
         box = Box(size[0], size[1], size[2], frame=frame.copy())
-        return cls(shape=box, grid=grid, name=name, frame=frame, **kwargs)
+        return cls(shape=box, grid=grid, box_mode=box_mode, name=name, frame=frame, **kwargs)
+
+    @classmethod
+    def from_shape(cls, shape, grid=(2, 2, 2), box_mode=True, name=None, frame=None, **kwargs):
+        """Construct a cellularized part from a shape primitive.
+
+        Overrides :meth:`Part.from_shape`, whose `cls(name, frame)` positional
+        call assumes the base `Part.__init__(name, frame)` signature and would
+        misassign `name`/`frame` into this class's `shape`/`mesh` parameters.
+
+        Parameters
+        ----------
+        shape : :class:`compas.geometry.Shape`
+        grid : tuple[int, int, int], optional
+        box_mode : bool, optional
+        name : str, optional
+        frame : :class:`compas.geometry.Frame`, optional
+
+        Returns
+        -------
+        :class:`CellularizedPart`
+        """
+        return cls(shape=shape, grid=grid, box_mode=box_mode, name=name, frame=frame, **kwargs)
+
+    @classmethod
+    def from_mesh(cls, mesh, grid=(2, 2, 2), box_mode=True, name=None, frame=None, **kwargs):
+        """Construct a cellularized part from a mesh.
+
+        See :meth:`from_shape` for why this overrides the `Part` base version.
+
+        Parameters
+        ----------
+        mesh : :class:`compas.datastructures.Mesh`
+        grid : tuple[int, int, int], optional
+        box_mode : bool, optional
+        name : str, optional
+        frame : :class:`compas.geometry.Frame`, optional
+
+        Returns
+        -------
+        :class:`CellularizedPart`
+        """
+        return cls(mesh=mesh, grid=grid, box_mode=box_mode, name=name, frame=frame, **kwargs)
 
     # ------------------------------------------------------------------
     # Cell grid
     # ------------------------------------------------------------------
 
-    def build_cell_grid(self, grid=None):
+    def build_cell_grid(self, grid=None, box_mode=None):
         """(Re)build `self.cell_network` from the part's current shape/mesh.
 
         Parameters
         ----------
         grid : tuple[int, int, int], optional
             Defaults to the grid the part was last built with.
+        box_mode : bool, optional
+            Defaults to the mode the part was last built with. See
+            :meth:`PartCellNetwork.build_cell_grid`.
         """
         grid = tuple(grid) if grid is not None else self.attributes["grid"]
         self.attributes["grid"] = grid
+        box_mode = self.attributes.get("box_mode", True) if box_mode is None else box_mode
+        self.attributes["box_mode"] = box_mode
 
-        if isinstance(self.shape, Box):
+        if isinstance(self.shape, Box) and box_mode:
             box = self.shape
             containment_mesh = None
         else:
-            box = self.mesh.compute_aabb()
+            # non-box mode always clips against `self.mesh` -- it exists even
+            # for exact Box shapes (derived automatically in __init__).
+            box = self.mesh.aabb()
             containment_mesh = self.mesh
 
-        self.cell_network.build_cell_grid(box, grid=grid, mesh=containment_mesh)
+        self.cell_network.build_cell_grid(box, grid=grid, mesh=containment_mesh, box_mode=box_mode)
 
     @property
     def num_cells(self):
@@ -424,6 +649,7 @@ class CellularizedPart(Part):
             shape=self.shape.copy() if self.shape is not None else None,
             mesh=self.mesh.copy() if self.shape is None and self.mesh is not None else None,
             grid=self.attributes["grid"],
+            box_mode=self.attributes.get("box_mode", True),
             name=self.attributes.get("name"),
             frame=self.frame.copy(),
         )
