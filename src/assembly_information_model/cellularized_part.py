@@ -270,6 +270,29 @@ class PartCellNetwork(CellNetwork):
         """
         return self.cell_attribute(cell, "cell_mesh")
 
+    def cell_box(self, cell):
+        """The cell's axis-aligned box, straight from its 8 grid-vertex points.
+
+        A much cheaper stand-in for :meth:`cell_to_mesh`/:meth:`cell_mesh`
+        when a caller only needs each cell's extent -- e.g. a lightweight
+        box preview instead of a full mesh -- since every grid cell (built
+        with ``box_mode=True``) already is a box; this skips reconstructing
+        face/vertex mesh topology for it. Not meaningful for a
+        ``box_mode=False`` cell's actual clipped shape -- use
+        :meth:`cell_mesh` for that instead.
+
+        Returns
+        -------
+        :class:`compas.geometry.Box`
+        """
+        points = self.cell_points(cell)
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        zs = [p[2] for p in points]
+        center = [(min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0, (min(zs) + max(zs)) / 2.0]
+        dx, dy, dz = max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)
+        return Box(dx, dy, dz, frame=Frame(center, [1, 0, 0], [0, 1, 0]))
+
     def build_cell_grid(self, box, grid=(2, 2, 2), mesh=None, tol=1e-6, box_mode=True):
         """Fill this (empty) network with a regular grid of hexahedral
         cells subdividing `box`, in `box`'s own frame.

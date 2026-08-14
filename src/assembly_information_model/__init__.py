@@ -2,9 +2,11 @@ from .assembly import Assembly
 from .part import Part
 from .cellularized_part import CellularizedPart
 from .cellularized_part import PartCellNetwork
-from .masonry_allocation import build_stretcher_bond_wall
-from .masonry_allocation import slots_by_half
+from .masonry_allocation import build_wall
+from .masonry_allocation import connect_wall
+from .masonry_allocation import label_facade
 from .masonry_allocation import allocate
+from .masonry_allocation import summarize_allocation
 
 
 __all__ = [
@@ -12,7 +14,9 @@ __all__ = [
     'Part',
     'CellularizedPart',
     'PartCellNetwork',
-    'build_stretcher_bond_wall',
-    'slots_by_half',
+    'build_wall',
+    'connect_wall',
+    'label_facade',
     'allocate',
+    'summarize_allocation',
 ]
