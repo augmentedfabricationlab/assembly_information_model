@@ -142,14 +142,21 @@ def allocate(container, stock):
         a 180-degree-flipped copy of it -- see `_flip_frame` -- if that
         orientation fit better), geometry left in the brick's own local
         coordinates, same convention as `build_wall`. Each part's key equals
-        its stock brick's ORIGINAL key in `stock`; its `layer`/`course`/
+        the SLOT's key in `container` (not the stock brick's own key -- see
+        `source_key` below) -- so `container`'s connections (e.g. from
+        `connect_wall`) carry straight over onto the result unchanged,
+        rather than needing `connect_wall` run again. Its `layer`/`course`/
         `position`/`front_axis`/`back_axis`/`front_label`/`back_label`
-        attributes are copied over from the slot it was placed in, plus
-        `front_damage_score`/`back_damage_score` recording the achieved
-        score on each required side (`None` for a side that wasn't a
-        requirement) -- so :func:`summarize_allocation` (or your own
-        queries) can group/inspect results by slot without having to
-        re-match parts by frame position.
+        attributes are copied over from the slot it was placed in, plus:
+        - `front_damage_score`/`back_damage_score`: the achieved score on
+          each required side (`None` for a side that wasn't a requirement).
+        - `source_key`: the stock brick's ORIGINAL key in `stock`, for
+          tracing which physical brick ended up where now that the part's
+          own key tracks the slot instead.
+
+        so :func:`summarize_allocation` (or your own queries) can group/
+        inspect results by slot without having to re-match parts by frame
+        position.
 
     Raises
     ------
@@ -176,6 +183,10 @@ def allocate(container, stock):
 
     remaining = list(stock_parts)
     result = Assembly(name="allocated_" + (container.name or "assembly"))
+    # carry over build_wall's own wall-level metadata (brick_size, joint,
+    # num_courses, ...) so connect_wall (or anything else keyed off it)
+    # still works on the allocated assembly, not just the container
+    result.attributes.update({key: value for key, value in container.attributes.items() if key != "name"})
 
     def place(slot, brick, flipped, front_score, back_score):
         occupant = brick.copy()
@@ -191,9 +202,13 @@ def allocate(container, stock):
                 "back_label": slot.attributes.get("back_label"),
                 "front_damage_score": front_score,
                 "back_damage_score": back_score,
+                "source_key": brick.key,
             }
         )
-        result.add_part(occupant, key=brick.key)
+        # same key as the slot it fills (not the stock brick's own key --
+        # that's `source_key` now) so `container`'s connections carry over
+        # onto `result` unchanged, below
+        result.add_part(occupant, key=slot.key)
 
     for slot, requirements in constrained:
         axis = requirements[0][1]  # every requirement on one slot shares an axis in practice (see module docstring)
@@ -222,6 +237,11 @@ def allocate(container, stock):
     )
     for (slot, _requirements), brick in zip(unconstrained, remaining):
         place(slot, brick, False, None, None)
+
+    # container's own connections (if any -- e.g. from connect_wall) are
+    # still valid as-is on result, since occupants share their slot's key
+    for (u, v), attrs in container.connections(data=True):
+        result.graph.add_edge(u, v, **attrs)
 
     return result
 
