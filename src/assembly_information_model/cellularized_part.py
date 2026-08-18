@@ -250,7 +250,7 @@ class PartCellNetwork(CellNetwork):
         return net
 
     def _reindex(self):
-        self.ckey_to_ijk = {ckey: self.cell_attribute(ckey, "ijk") for ckey in self.cells()}
+        self.ckey_to_ijk = {ckey: tuple(self.cell_attribute(ckey, "ijk")) for ckey in self.cells()}
         self.ijk_to_ckey = {ijk: ckey for ckey, ijk in self.ckey_to_ijk.items()}
 
     def cell_at(self, i, j, k):
