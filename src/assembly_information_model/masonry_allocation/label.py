@@ -59,7 +59,24 @@ def _band_function(exposed_parts, style, amount):
         return row_band
     if style == "columns":
         return col_band
-    return lambda part: row_band(part) + col_band(part)
+    if style == "checkered":
+        return lambda part: row_band(part) + col_band(part)
+
+    courses = [part.attributes["course"] for part in exposed_parts]
+    lo, span = min(courses), max(courses) - min(courses) + 1
+    counts = {}
+    for part in exposed_parts:
+        key = (part.attributes["layer"], part.attributes["course"])
+        counts[key] = max(counts.get(key, 0), part.attributes["position"] + 1)
+
+    def cross_band(part):
+        row_idx = part.attributes["course"] - lo
+        key = (part.attributes["layer"], part.attributes["course"])
+        col_idx = part.attributes["position"] / counts[key] * span
+        on_cross = min(abs(row_idx - col_idx), abs(row_idx + col_idx - span)) < amount / 2
+        return 0 if on_cross else 1
+
+    return cross_band
 
 
 def _label_single_facade(container, facade, style, amount, alternate):
@@ -106,26 +123,36 @@ def label_facade(container, facade="front", style="rows", amount=2, alternate=Tr
         to the exact opposite of `front_label` (e.g. a header slot labeled
         "good" on the front is "bad" on the back, and vice versa) -- so
         front and back are never both "bad"/both "good" on the same slot.
-    style : {"rows", "columns", "checkered"}, optional
+    style : {"rows", "columns", "checkered", "cross"}, optional
         "rows": horizontal stripes -- bands of consecutive `course`s.
         "columns": vertical stripes -- bands of consecutive `position`s,
         computed *within* each (layer, course) since course length can vary
         (Flemish/English bond, or a curve). "checkered": both at once -- a
         slot's row band and column band (same `amount` for each) are summed,
         and "bad"/"good" alternate on *that* combined parity, so `amount`
-        controls how large each checker square is (higher = finer).
+        controls how large each checker square is (higher = finer). "cross":
+        diagonal cross bracing -- a slot is "bad" if it falls within
+        `amount` courses of either diagonal of the facade (corner to
+        corner), "good" otherwise; `position` is rescaled into course units
+        (again *within* each (layer, course)) so the diagonals reach corner
+        to corner even when row lengths vary.
     amount : int, optional
         Number of stripes (or, for `style="checkered"`, row/column bands per
         axis). Any positive integer: 1 means the whole facade gets one
         uniform label (all "bad", or all "good" if `alternate` is False);
         even numbers split "bad"/"good" evenly; odd numbers (other than 1)
-        leave one label with one extra band.
+        leave one label with one extra band. For `style="cross"`, `amount`
+        instead means the cross's thickness, in courses (e.g. `amount=2`
+        makes each diagonal arm of the X about 2 courses wide), independent
+        of how many courses the facade spans.
     alternate : bool, optional
         Which band starts "bad" -- True (default): band 0 (e.g. bottom row /
         first column / bottom-left checker) is "bad". False: flips that, so
-        band 0 is "good" instead. Only affects `facade="front"`/`"back"`
-        directly; for `facade="both"`, back is always front's opposite
-        regardless of which one `alternate` made "bad" first.
+        band 0 is "good" instead. For `style="cross"`, True makes the X
+        itself "bad" (and the rest of the facade "good"); False flips that.
+        Only affects `facade="front"`/`"back"` directly; for `facade="both"`,
+        back is always front's opposite regardless of which one `alternate`
+        made "bad" first.
 
     Returns
     -------
@@ -139,8 +166,8 @@ def label_facade(container, facade="front", style="rows", amount=2, alternate=Tr
     """
     if facade not in ("front", "back", "both"):
         raise ValueError('facade must be "front", "back", or "both", got {!r}.'.format(facade))
-    if style not in ("rows", "columns", "checkered"):
-        raise ValueError('style must be "rows", "columns", or "checkered", got {!r}.'.format(style))
+    if style not in ("rows", "columns", "checkered", "cross"):
+        raise ValueError('style must be "rows", "columns", "checkered", or "cross", got {!r}.'.format(style))
     if amount < 1:
         raise ValueError("amount must be a positive integer, got {!r}.".format(amount))
 
