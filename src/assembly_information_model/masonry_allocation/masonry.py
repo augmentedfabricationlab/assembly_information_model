@@ -97,11 +97,12 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import division
 
-from compas.geometry import Frame, Point, Polyline
+from compas.geometry import Frame, Point, Polyline, Box
 from compas.geometry import add_vectors
 from compas.geometry import scale_vector
 from compas.geometry import cross_vectors
 from compas.geometry import normalize_vector
+from compas.geometry import Scale
 
 from shapely.geometry import Polygon
 
@@ -168,6 +169,51 @@ def _stretcher_bond_course(course, L, W, joint, num_bricks_per_course, curve, cu
     return [(point, running, depth, depth, "y", None) for point, running, depth in anchors]
 
 
+def _stretcher_closure_brick(s, curve, curve_length):
+    """(point, xaxis, yaxis, depth_axis, front_axis, back_axis) for a half brick, centered at arc-length `s` along a stretcher course.
+
+    `s` is measured the same way `_course_anchors` measures it -- distance
+    along world X (no `curve`), or along `curve` from its start point --
+    so a caller can place this closure anywhere along the course by giving
+    the arc-length position of its own center, the same way a regular
+    brick's center is computed. See `build_wall`'s stretcher-bond dispatch
+    for where `s` comes from for the leading/trailing closures specifically.
+    """
+    if curve is None:
+        return Point(s, 0.0, 0.0), [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 0.0], "y", None
+    t = s / curve_length
+    point = curve.point_at(t)
+    running_axis = normalize_vector(curve.tangent_at(t))
+    depth_axis = normalize_vector(cross_vectors([0.0, 0.0, 1.0], running_axis))
+    return point, running_axis, depth_axis, depth_axis, "y", None
+
+
+def _shrunk_copy(part, axis, fraction):
+    """A copy of `part` whose mesh (and shape, if it's a `Box`) is shrunk to `fraction` of itself along its own local `axis`.
+
+    Used for a closure brick -- its mesh/shape are otherwise identical
+    copies of the template `part`'s (see `Part.copy`), which is the wrong
+    *geometry* for something that's supposed to be a half brick, even once
+    it's correctly positioned via `frame`. Mesh vertices (and a `Box`
+    shape's own dimensions) are in the part's own local coordinates,
+    centered on its local origin (see the module docstring on `frame`) --
+    so scaling by `fraction` along one local axis, about that same origin,
+    keeps the shrunk brick centered exactly where a regular brick would be,
+    just smaller. `axis`: "x" shrinks length (L), "y" shrinks width (W) --
+    whichever runs along the course for this brick's orientation, same rule
+    as `_footprint`'s.
+    """
+    slot = part.copy()
+    factors = [fraction if axis == "x" else 1.0, fraction if axis == "y" else 1.0, 1.0]
+    scale = Scale.from_factors(factors)
+    if slot.mesh is not None:
+        slot.mesh.transform(scale)
+    if isinstance(slot.shape, Box):
+        box = slot.shape
+        slot.shape = Box(box.xsize * factors[0], box.ysize * factors[1], box.zsize, frame=box.frame.copy())
+    return slot
+
+
 def _header_bond_course(course, L, W, joint, num_bricks_per_course, curve, curve_length, stagger=None):
     """(point, xaxis, yaxis, depth_axis, front_axis, back_axis) for each brick in one course, laid as headers.
 
@@ -186,6 +232,42 @@ def _header_bond_course(course, L, W, joint, num_bricks_per_course, curve, curve
     """
     anchors = _course_anchors(course, W, joint, num_bricks_per_course, curve, curve_length, stagger=stagger)
     return [(point, depth, scale_vector(running, -1.0), depth, "x", "x") for point, running, depth in anchors]
+
+
+def _header_closure_brick(s, curve, curve_length):
+    """(point, xaxis, yaxis, depth_axis, front_axis, back_axis) for a longitudinal half brick, centered at arc-length `s` along a header course.
+
+    A header brick's length (L) runs into the wall depth, tying all the way
+    through -- shortening *that* dimension for a closure would leave a gap
+    in the bond through the wall, so a header closer is instead cut the
+    other way: lengthwise, parallel to its own length, giving a brick with
+    half the width (W, the dimension that runs along the course here) but
+    the full length -- a "long_half" (queen closer). Otherwise identical to
+    :func:`_stretcher_closure_brick`: `s` is arc-length along the course the
+    same way :func:`_course_anchors` measures it, and the point/axes use the
+    same xaxis/yaxis swap as :func:`_header_bond_course` so this closure's
+    frame convention matches a regular header brick's.
+
+    Unlike a regular brick's anchor, `s` here can fall outside `[0,
+    curve_length]` (English bond's header-course closures extend past the
+    reference courses' own ends -- see `build_wall`'s "english" dispatch).
+    `curve.point_at`/`tangent_at` aren't defined out there, so this falls
+    back to a straight extrapolation from whichever end `s` is past, along
+    that end's own tangent -- fine since `s` is only ever a brick-scale
+    distance beyond the curve, never far enough for the curve's actual
+    curvature over that little distance to matter.
+    """
+    if curve is None:
+        point, running_axis, depth_axis = Point(s, 0.0, 0.0), [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]
+    else:
+        t = s / curve_length
+        t_clamped = min(max(t, 0.0), 1.0)
+        anchor = curve.point_at(t_clamped)
+        running_axis = normalize_vector(curve.tangent_at(t_clamped))
+        overshoot = s - t_clamped * curve_length
+        point = anchor if overshoot == 0.0 else add_vectors(anchor, scale_vector(running_axis, overshoot))
+        depth_axis = normalize_vector(cross_vectors([0.0, 0.0, 1.0], running_axis))
+    return point, depth_axis, scale_vector(running_axis, -1.0), depth_axis, "x", "x"
 
 
 def _flemish_bond_course(course, L, W, joint, num_bricks_per_course, curve, curve_length):
@@ -217,12 +299,8 @@ def _flemish_bond_course(course, L, W, joint, num_bricks_per_course, curve, curv
     stretcher unit contributes two entries to the returned list, so its
     length can exceed `num_bricks_per_course` (and needn't be even).
     """
-    if course % 2 == 0:
-        stagger = 0.0
-        odd_first_header = False  # even courses start with a stretcher pair
-    else:
-        stagger = (L - W) / 2.0
-        odd_first_header = True  # odd courses start with a header
+    stagger, odd_first_header = _flemish_stagger(course, L, W)
+    layout = _flemish_unit_layout(stagger, odd_first_header, num_bricks_per_course, L, W, joint, curve_length)
 
     def unit_bricks(point, running_axis, depth_axis, is_header):
         if is_header:
@@ -236,28 +314,75 @@ def _flemish_bond_course(course, L, W, joint, num_bricks_per_course, curve, curv
         ]
 
     bricks = []
-    s = stagger
-    unit_index = 0
-    while curve is not None or unit_index < num_bricks_per_course:
-        is_header = (unit_index % 2 == 0) == odd_first_header
-        footprint = W if is_header else L
-        center_s = s + footprint / 2.0
-
+    for center_s, _footprint, is_header in layout:
         if curve is None:
             point, running_axis, depth_axis = Point(center_s, 0.0, 0.0), [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]
         else:
-            if center_s + footprint / 2.0 > curve_length:
-                break
             t = center_s / curve_length
             point = curve.point_at(t)
             running_axis = normalize_vector(curve.tangent_at(t))
             depth_axis = normalize_vector(cross_vectors([0.0, 0.0, 1.0], running_axis))
-
         bricks.extend(unit_bricks(point, running_axis, depth_axis, is_header))
-        s += footprint + joint
-        unit_index += 1
 
     return bricks
+
+
+def _flemish_stagger(course, L, W):
+    """(stagger, odd_first_header) for one Flemish course -- see `_flemish_bond_course`."""
+    if course % 2 == 0:
+        return 0.0, False  # even courses start with a stretcher pair, unstaggered
+    return (L - W) / 2.0, True  # odd courses start with a header, staggered
+
+
+def _flemish_unit_layout(stagger, odd_first_header, num_bricks_per_course, L, W, joint, curve_length):
+    """[(center_s, footprint, is_header), ...] scalar (1D) layout for one Flemish course's units.
+
+    Pure arc-length bookkeeping, factored out of :func:`_flemish_bond_course`
+    so `build_wall` can also use it to find exactly where a course's last
+    unit ends (to place a closure right after it) without duplicating this
+    loop or generating any 3D geometry. Unbounded by `num_bricks_per_course`
+    when `curve_length` is given -- stops when the next unit would run past
+    it instead.
+    """
+    units = []
+    s = stagger
+    unit_index = 0
+    while curve_length is not None or unit_index < num_bricks_per_course:
+        is_header = (unit_index % 2 == 0) == odd_first_header
+        footprint = W if is_header else L
+        center_s = s + footprint / 2.0
+        if curve_length is not None and center_s + footprint / 2.0 > curve_length:
+            break
+        units.append((center_s, footprint, is_header))
+        s += footprint + joint
+        unit_index += 1
+    return units
+
+
+def _flemish_pair_closure_bricks(s, curve, curve_length, W, joint):
+    """[(point, xaxis, yaxis, depth_axis, front_axis, back_axis), (...)] for a stretcher-style closure pair, centered at arc-length `s` along a Flemish course.
+
+    Mirrors the stretcher-pair branch of `_flemish_bond_course`'s own
+    `unit_bricks` (front/back copies stacked `W` deep, flush with the
+    wall's outer face at depth 0) as a standalone pair, sized externally
+    (via `build_wall`'s `_shrunk_copy`/`course_length`) rather than a fixed
+    `L`, so it works for whatever along-course fraction this particular
+    closure pair needs -- e.g. the quarter-length pair `build_wall` prepends
+    to an odd Flemish course's own start.
+    """
+    if curve is None:
+        point, running_axis, depth_axis = Point(s, 0.0, 0.0), [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]
+    else:
+        t = s / curve_length
+        point = curve.point_at(t)
+        running_axis = normalize_vector(curve.tangent_at(t))
+        depth_axis = normalize_vector(cross_vectors([0.0, 0.0, 1.0], running_axis))
+    front = add_vectors(point, scale_vector(depth_axis, W / 2.0))
+    back = add_vectors(point, scale_vector(depth_axis, W / 2.0 + W + joint))
+    return [
+        (front, running_axis, depth_axis, depth_axis, "y", None),
+        (back, running_axis, depth_axis, depth_axis, None, "y"),
+    ]
 
 
 def _double_stretcher_course(course_bricks, W, joint):
@@ -334,10 +459,32 @@ def build_wall(
           brick-local axis ("x"/"y") exposed on that slot's own front/back,
           per the bond type -- see the module docstring. `None` means that
           side isn't exposed at all.
+        - "is_closure": bool -- True for a closure brick inserted at the
+          start and/or end of a staggered stretcher/header course, of every
+          header course (`bond_type="english"`), at the start of an odd
+          Flemish course, or at the end of an even one (see `build_wall`'s
+          "flemish" dispatch for why start and end land on opposite
+          parities there), False for a regular full-size brick. A stretcher
+          (or Flemish stretcher-pair) closure is cut across -- a fraction of
+          L, full W; a header closure is cut lengthwise instead -- full L, a
+          fraction of W -- since shortening a header's L would break the
+          bond through the wall depth -- see `_header_closure_brick`.
+        - "brick_fraction": float -- 1.0 for a regular brick, else the
+          closure's fraction of one (0.75/0.5/0.25 for a three-quarter,
+          half, or quarter).
+        - "course_length": float -- this slot's actual along-course
+          footprint (world units); `brick_fraction` times the regular size
+          for a closure. Used by `_footprint`/`connect_wall` so a closure's
+          smaller footprint isn't mistaken for a full brick's.
         - "occupant": None, filled in later by allocate.py
 
-        No "half" attribute yet -- see `allocate.label_bad_good` to assign
-        one before calling `allocate.allocate`.
+        A closure slot's own "name" carries a "_half_length"/"_quarter_length"/
+        "_three_quarter_length" (cut across, fraction of L) or "_half_width"
+        (cut lengthwise, fraction of W) suffix, and its `mesh`/`shape` are an
+        actual `brick_fraction`-size copy of `part`'s -- see `_shrunk_copy`
+        -- not just a smaller `frame`. No "front_label"/"back_label" yet --
+        see `label.label_facade` to assign those before calling
+        `allocate.allocate` (closures are skipped there regardless of style).
     """
     course_bond_funcs = {
         "stretcher": _stretcher_bond_course,
@@ -357,12 +504,40 @@ def build_wall(
     # pair unit/course is already a full L deep on its own (the point of
     # both bonds), same depth footprint as header bond.
     depth = {"stretcher": W, "header": L, "flemish": L, "english": L}[bond_type]
+    # (closure brick constructor, along-course spacing) for bond types that
+    # get start/end closures on their staggered (odd) courses -- see the
+    # per-course dispatch below
+    closure_bond = {"stretcher": (_stretcher_closure_brick, L), "header": (_header_closure_brick, W)}
 
     curve_length = None
     if curve is not None:
         if not isinstance(curve, Polyline):
             curve = curve.to_polyline()
         curve_length = curve.length
+
+    # Flemish: which course parity's own natural unit sequence ends up
+    # SHORTER gets the three-quarter-length end closure, to catch up to the
+    # other parity's end -- see the per-course dispatch below. This isn't
+    # fixed to odd or even: without a curve, it flips on whether
+    # `num_bricks_per_course` is even or odd (an even count has equal
+    # numbers of header/stretcher-pair units regardless of which starts, so
+    # the two parities' totals match and only the odd course's own stagger
+    # makes it the longer one -- an odd count instead gives whichever parity
+    # starts with the stretcher-pair one extra L-sized unit over a
+    # W-sized one, which can outweigh the stagger); with a curve, it's
+    # however the alternating W/L footprints happen to pack against that
+    # specific `curve_length`. So it's resolved by actually generating both
+    # parities' own layouts and comparing where they end, not assumed.
+    flemish_end_parity = None
+    if bond_type == "flemish":
+        even_layout = _flemish_unit_layout(0.0, False, num_bricks_per_course, L, W, joint, curve_length)
+        odd_layout = _flemish_unit_layout((L - W) / 2.0, True, num_bricks_per_course, L, W, joint, curve_length)
+        even_edge = (even_layout[-1][0] + even_layout[-1][1] / 2.0) if even_layout else 0.0
+        odd_edge = (odd_layout[-1][0] + odd_layout[-1][1] / 2.0) if odd_layout else 0.0
+        if even_edge < odd_edge:
+            flemish_end_parity = 0
+        elif odd_edge < even_edge:
+            flemish_end_parity = 1
 
     wall = Assembly(name="wall")
     wall.attributes["brick_size"] = (L, W, H)
@@ -410,7 +585,91 @@ def build_wall(
             else:
                 course_bricks = course_bond(course, L, W, joint, num_bricks_per_course, curve, curve_length)
 
-            for position, (point, xaxis, yaxis, depth_axis, front_axis, back_axis) in enumerate(course_bricks):
+            # a staggered (odd) stretcher/header course is offset by half a
+            # brick from the even courses -- see `_course_anchors` -- leaving
+            # a gap of that same size at its own start, and (since every
+            # brick after it is shifted along by that same offset) an
+            # overhang of that same size past where the even courses end.
+            # Close both with a half brick -- see `_stretcher_closure_brick`/
+            # `_header_closure_brick`. `closure_fractions[i]` is `None` for a
+            # regular brick, or `course_bricks[i]`'s fraction of a full one.
+            closure_fractions = [None] * len(course_bricks)
+            if bond_type in closure_bond and course % 2 == 1 and course_bricks:
+                closure_brick, spacing = closure_bond[bond_type]
+                start_closure = closure_brick(spacing / 4.0, curve, curve_length)
+
+                stagger = (spacing + joint) / 2.0
+                n = len(course_bricks)
+                last_edge = stagger + (n - 1) * (spacing + joint) + spacing  # right edge of the last full brick
+                end_s = last_edge + joint + spacing / 4.0
+                add_end_closure = curve is None or end_s + spacing / 4.0 <= curve_length
+
+                course_bricks = [start_closure] + course_bricks
+                closure_fractions = [0.5] + closure_fractions
+                if add_end_closure:
+                    course_bricks = course_bricks + [closure_brick(end_s, curve, curve_length)]
+                    closure_fractions = closure_fractions + [0.5]
+            elif bond_type == "english" and course % 2 == 0 and course_bricks:
+                # English's header courses aren't staggered (stagger=0.0
+                # above) -- they're already the reference courses everything
+                # else lines up flush with -- but still get a half-width
+                # closure at each end, same cut as a plain header bond
+                # closure (see `_header_closure_brick`), extending the
+                # course itself rather than filling a gap. With a `curve`,
+                # the start closure falls before the curve's own start
+                # (arc-length s < 0) -- `_header_closure_brick` extrapolates
+                # for that.
+                n = len(course_bricks)
+                edge_last = (n - 1) * (W + joint) + W  # right edge of the last header, stagger 0
+                start_s = -(joint + W / 4.0)
+                end_s = edge_last + joint + W / 4.0
+                add_end_closure = curve is None or end_s + W / 4.0 <= curve_length
+
+                course_bricks = [_header_closure_brick(start_s, curve, curve_length)] + course_bricks
+                closure_fractions = [0.5] + closure_fractions
+                if add_end_closure:
+                    course_bricks = course_bricks + [_header_closure_brick(end_s, curve, curve_length)]
+                    closure_fractions = closure_fractions + [0.5]
+            elif bond_type == "flemish" and course_bricks:
+                # odd Flemish courses start with a header, staggered by
+                # (L - W) / 2 (see `_flemish_bond_course`), leaving a gap at
+                # the very start -- close it with a quarter-length stretcher
+                # pair flush against the course's own start, mirroring a
+                # regular stretcher unit but at 1/4 of L instead of a full
+                # one. This half is always on the odd course.
+                if course % 2 == 1:
+                    start_pair = _flemish_pair_closure_bricks(L / 8.0, curve, curve_length, W, joint)
+                    course_bricks = start_pair + course_bricks
+                    closure_fractions = [0.25, 0.25] + closure_fractions
+
+                # At the end, it's whichever course parity's own natural
+                # sequence falls SHORT of the other's (`flemish_end_parity`,
+                # computed once above by actually comparing both) that gets
+                # a three-quarter-length stretcher pair, right after its own
+                # last unit (found via `_flemish_unit_layout`, the same
+                # scalar layout `_flemish_bond_course` itself used to build
+                # `course_bricks`), to roughly catch up -- same "add to
+                # whichever side falls short" logic as the start closure,
+                # just at the opposite end, and NOT necessarily the same
+                # parity as the start closure -- see `flemish_end_parity`.
+                if course % 2 == flemish_end_parity:
+                    stagger, odd_first_header = _flemish_stagger(course, L, W)
+                    layout = _flemish_unit_layout(
+                        stagger, odd_first_header, num_bricks_per_course, L, W, joint, curve_length
+                    )
+                    if layout:
+                        last_s, last_footprint, _last_is_header = layout[-1]
+                        edge_last = last_s + last_footprint / 2.0
+                        end_s = edge_last + joint + 3.0 * L / 8.0
+                        add_end_closure = curve is None or end_s + 3.0 * L / 8.0 <= curve_length
+                        if add_end_closure:
+                            end_pair = _flemish_pair_closure_bricks(end_s, curve, curve_length, W, joint)
+                            course_bricks = course_bricks + end_pair
+                            closure_fractions = closure_fractions + [0.75, 0.75]
+
+            for position, ((point, xaxis, yaxis, depth_axis, front_axis, back_axis), fraction) in enumerate(
+                zip(course_bricks, closure_fractions)
+            ):
                 origin = add_vectors(point, scale_vector(depth_axis, layer_offset))
                 origin = add_vectors(origin, [0.0, 0.0, z])
                 # cross(xaxis, yaxis) points up by construction everywhere above;
@@ -422,10 +681,34 @@ def build_wall(
                 else:
                     frame = Frame(origin, scale_vector(xaxis, -1.0), yaxis)
 
-                slot = part.copy()
+                is_closure = fraction is not None
+                if is_closure:
+                    # whichever of L/W runs along the course for THIS brick's
+                    # own orientation (W for a header-type face, L
+                    # otherwise) -- see `_footprint`'s identical rule
+                    shrink_axis = "y" if front_axis == "x" else "x"
+                    slot = _shrunk_copy(part, shrink_axis, fraction)
+                else:
+                    slot = part.copy()
                 slot.frame = frame
+
+                full_spacing = W if front_axis == "x" else L
+                course_length = (full_spacing * fraction) if is_closure else full_spacing
+                name = "slot_l{:02d}_c{:02d}_p{:02d}".format(layer, course, position)
+                if is_closure:
+                    # a header-oriented closure is cut lengthwise (full L,
+                    # a fraction of W) -- since shortening L would break the
+                    # bond through the wall depth -- named "..._width";
+                    # any other closure is cut across (a fraction of L,
+                    # full W) instead, named "..._length"
+                    frac_name = {0.75: "three_quarter", 0.5: "half", 0.25: "quarter"}.get(
+                        fraction, "{:g}x".format(fraction)
+                    )
+                    dim_name = "width" if front_axis == "x" else "length"
+                    name += "_{}_{}".format(frac_name, dim_name)
+
                 slot.attributes.update({
-                    "name": "slot_l{:02d}_c{:02d}_p{:02d}".format(layer, course, position),
+                    "name": name,
                     "layer": layer,
                     "course": course,
                     "position": position,
@@ -434,6 +717,9 @@ def build_wall(
                     "front_label": None, # filled in later by label.py
                     "back_label": None,  # filled in later by label.py
                     "occupant": None,  # filled in later by allocate.py
+                    "is_closure": is_closure,
+                    "brick_fraction": fraction if is_closure else 1.0,
+                    "course_length": course_length,
                 })
                 wall.add_part(slot)
 
@@ -449,8 +735,19 @@ def _footprint(part, L, W):
     `frame.xaxis` by `W` along `frame.yaxis`, centered on `frame.point`. This
     holds regardless of `bond_type`, since every bond just points the
     template's own fixed local L/W axes in different world directions --
-    it never changes which local axis is L and which is W.
+    it never changes which local axis is L and which is W -- EXCEPT for a
+    closure brick (`part.attributes["is_closure"]`), whose along-course
+    dimension is shrunk to its own "course_length" (see `build_wall`)
+    instead of the template's full L or W: along `frame.yaxis` (W) for a
+    header-oriented closure (`front_axis` "x"), along `frame.xaxis` (L)
+    otherwise -- matching how `build_wall` placed it.
     """
+    if part.attributes.get("is_closure"):
+        course_length = part.attributes["course_length"]
+        if part.attributes.get("front_axis") == "x":
+            W = course_length
+        else:
+            L = course_length
     dx = scale_vector(part.frame.xaxis, L / 2.0)
     dy = scale_vector(part.frame.yaxis, W / 2.0)
     corners = [

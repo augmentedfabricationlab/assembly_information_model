@@ -84,7 +84,11 @@ def _label_single_facade(container, facade, style, amount, alternate):
     label_key = "{}_label".format(facade)
 
     def exposed(part):
-        return part.attributes[axis_key] is not None
+        # closure (e.g. half) bricks are excluded from labeling even where
+        # they're otherwise exposed -- see masonry.py's `build_wall` -- a cut
+        # brick isn't a meaningful grading target, so it's left with label
+        # None like an unexposed slot
+        return part.attributes[axis_key] is not None and not part.attributes.get("is_closure", False)
 
     exposed_parts = [part for part in container.parts() if exposed(part)]
 
