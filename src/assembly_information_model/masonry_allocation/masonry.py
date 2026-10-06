@@ -9,19 +9,20 @@ where a brick can be placed -- built as an assembly_information_model
 This module only builds the container: an Assembly of slot parts (frame +
 course/position/layer/front_axis/back_axis attributes), each a
 positioned copy of a given template brick `Part` (typically a
-`CellularizedPart`). It does NOT decide which slots are "good" vs "bad", nor
-which *stock* brick ends up in which slot -- both are allocate.py's job:
-`label_bad_good` assigns a "half" attribute per some pluggable criterion
-(position-based, a side of the wall, an arbitrary area -- anything expressible
-as a predicate), and `allocate` creates its own transformed copies of graded
-stock bricks and assigns them to slots accordingly.
+`CellularizedPart`). It does NOT decide what damage target any slot should
+be labeled with, nor which *stock* brick ends up in which slot -- both are
+label.py/allocate.py's job: `label_facade` assigns a "front_label"/
+"back_label" target in `[0, 1]` per some pluggable criterion (stripes, a
+checkerboard, a gradient, a diagonal cross -- see label.py), and `allocate`
+creates its own transformed copies of graded stock bricks and assigns them
+to slots accordingly.
 
 Each slot's `front_axis`/`back_axis` name the brick-local axis ("x" or "y")
 whose face is exposed on that slot's own front/back, or `None` if that side
 isn't exposed at all -- see `front_axis`/`back_axis` per bond type below.
 These describe the brick's own orientation only, not whether that particular
 `layer` sits at the wall's true outer boundary (relevant once `num_layers`
-> 1) -- that's left for `label_bad_good`/`allocate` to decide later.
+> 1) -- that's left for `label_facade`/`allocate` to decide later.
 
 Bond conventions used here (`bond_type`):
 - "stretcher" (default): brick length runs along the course, so the long
