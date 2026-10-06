@@ -252,9 +252,10 @@ class PartCellNetwork(CellNetwork):
     def _reindex(self):
         self.ckey_to_ijk = {ckey: tuple(self.cell_attribute(ckey, "ijk")) for ckey in self.cells()}
         self.ijk_to_ckey = {ijk: ckey for ckey, ijk in self.ckey_to_ijk.items()}
+        self.bin_to_ckey = {self.cell_attribute(ckey, "bin"): ckey for ckey in self.cells()}
 
     def cell_at(self, i, j, k):
-        """The cell key at grid index (i, j, k)."""
+        """The cell key at grid index (i, j, k). Volume grids only -- a surface grid has several cells per index."""
         return self.ijk_to_ckey[(i, j, k)]
 
     def active_cells(self):
@@ -293,7 +294,7 @@ class PartCellNetwork(CellNetwork):
         dx, dy, dz = max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)
         return Box(dx, dy, dz, frame=Frame(center, [1, 0, 0], [0, 1, 0]))
 
-    def build_cell_grid(self, box, grid=(2, 2, 2), mesh=None, tol=1e-6, box_mode=True):
+    def build_cell_grid(self, box, grid=(2, 2, 2), mesh=None, tol=1e-6, box_mode=True, cell_type="volume"):
         """Fill this (empty) network with a regular grid of hexahedral
         cells subdividing `box`, in `box`'s own frame.
 
@@ -324,12 +325,24 @@ class PartCellNetwork(CellNetwork):
             actual part geometry subdivided into irregular cells, rather than
             a box approximation. A cell is `active` if that clip is
             non-empty. Slower, and only meaningful when `mesh` is given.
+        cell_type : {"volume", "surface"}, optional
+            "volume" (default): one hexahedral box per grid index. "surface":
+            one rectangular quad per exterior face of the grid, i.e.
+            2 * (nx*ny + ny*nz + nz*nx) cells, each sitting on a grid
+            boundary and labeled with the outward face (e.g. "x-", "z+").
+            Surface cells only support box shapes: `mesh` must be None and
+            `box_mode` must be True.
 
         Returns
         -------
         :class:`PartCellNetwork`
             self
         """
+        if cell_type not in ("volume", "surface"):
+            raise ValueError('cell_type must be "volume" or "surface", got {!r}.'.format(cell_type))
+        if cell_type == "surface" and (mesh is not None or not box_mode):
+            raise ValueError('cell_type="surface" only supports box shapes (mesh=None, box_mode=True).')
+
         self.clear()
 
         nx, ny, nz = grid
@@ -379,12 +392,34 @@ class PartCellNetwork(CellNetwork):
                 [v000, v010, v011, v001],  # left (x-)
                 [v100, v110, v111, v101],  # right (x+)
             ]
+            ijk = (i, j, k)
+            ijk_label = "".join(str(v) for v in ijk)
+
+            if cell_type == "surface":
+                exterior_faces = (
+                    ("z-", k == 0, face_vertices[0]),
+                    ("z+", k == nz - 1, face_vertices[1]),
+                    ("y-", j == 0, face_vertices[2]),
+                    ("y+", j == ny - 1, face_vertices[3]),
+                    ("x-", i == 0, face_vertices[4]),
+                    ("x+", i == nx - 1, face_vertices[5]),
+                )
+                for face_label, on_boundary, fv in exterior_faces:
+                    if not on_boundary:
+                        continue
+                    ckey = self.add_cell([self.add_face(fv)])
+                    self.cell_attribute(ckey, "ijk", ijk)
+                    self.cell_attribute(ckey, "face", face_label)
+                    self.cell_attribute(ckey, "bin", "{}-{}".format(ijk_label, face_label))
+                    self.cell_attribute(ckey, "damage_score", None)
+                    self.cell_attribute(ckey, "active", True)
+                continue
+
             faces = [self.add_face(fv) for fv in face_vertices]
             ckey = self.add_cell(faces)
 
-            ijk = (i, j, k)
             self.cell_attribute(ckey, "ijk", ijk)
-            self.cell_attribute(ckey, "bin", "".join(str(v) for v in ijk))
+            self.cell_attribute(ckey, "bin", ijk_label)
             self.cell_attribute(ckey, "damage_score", None)
 
             if not box_mode and mesh is not None:
@@ -427,7 +462,9 @@ class CellularizedPart(Part):
     frame : :class:`compas.geometry.Frame`, optional
     """
 
-    def __init__(self, shape=None, mesh=None, grid=(2, 2, 2), box_mode=True, name=None, frame=None, **kwargs):
+    def __init__(
+        self, shape=None, mesh=None, grid=(2, 2, 2), box_mode=True, name=None, frame=None, cell_type="volume", **kwargs
+    ):
         super(CellularizedPart, self).__init__(name=name, frame=frame, **kwargs)
 
         if shape is not None:
@@ -440,8 +477,9 @@ class CellularizedPart(Part):
 
         self.attributes["grid"] = tuple(grid)
         self.attributes["box_mode"] = box_mode
+        self.attributes["cell_type"] = cell_type
         self.cell_network = PartCellNetwork()
-        self.build_cell_grid(grid=grid, box_mode=box_mode)
+        self.build_cell_grid(grid=grid, box_mode=box_mode, cell_type=cell_type)
 
     @classmethod
     def from_box(cls, size, grid=(2, 2, 2), box_mode=True, name=None, frame=None, **kwargs):
@@ -510,7 +548,7 @@ class CellularizedPart(Part):
     # Cell grid
     # ------------------------------------------------------------------
 
-    def build_cell_grid(self, grid=None, box_mode=None):
+    def build_cell_grid(self, grid=None, box_mode=None, cell_type=None):
         """(Re)build `self.cell_network` from the part's current shape/mesh.
 
         Parameters
@@ -520,11 +558,22 @@ class CellularizedPart(Part):
         box_mode : bool, optional
             Defaults to the mode the part was last built with. See
             :meth:`PartCellNetwork.build_cell_grid`.
+        cell_type : {"volume", "surface"}, optional
+            Defaults to the type the part was last built with. "surface"
+            requires a `Box` shape and `box_mode=True`.
         """
         grid = tuple(grid) if grid is not None else self.attributes["grid"]
         self.attributes["grid"] = grid
         box_mode = self.attributes.get("box_mode", True) if box_mode is None else box_mode
         self.attributes["box_mode"] = box_mode
+        cell_type = self.attributes.get("cell_type", "volume") if cell_type is None else cell_type
+        self.attributes["cell_type"] = cell_type
+
+        if cell_type == "surface":
+            if not isinstance(self.shape, Box) or not box_mode:
+                raise ValueError('cell_type="surface" requires a Box shape and box_mode=True.')
+            self.cell_network.build_cell_grid(self.shape, grid=grid, box_mode=True, cell_type="surface")
+            return
 
         if isinstance(self.shape, Box) and box_mode:
             box = self.shape
@@ -559,11 +608,8 @@ class CellularizedPart(Part):
         net = self.cell_network
         if isinstance(scores, dict):
             for key, score in scores.items():
-                if isinstance(key, str):
-                    ijk = tuple(int(c) for c in key)
-                else:
-                    ijk = tuple(key)
-                ckey = net.ijk_to_ckey[ijk]
+                label = key if isinstance(key, str) else "".join(str(c) for c in key)
+                ckey = net.bin_to_ckey[label]
                 net.cell_attribute(ckey, "damage_score", score)
         else:
             # flat list, same order cells were created in
@@ -619,12 +665,16 @@ class CellularizedPart(Part):
         target = 0 if side == "-" else n_along - 1
 
         net = self.cell_network
+        is_surface = self.attributes.get("cell_type", "volume") == "surface"
         scores = []
         for ckey in net.cells():
             if not net.cell_attribute(ckey, "active"):
                 continue
-            ijk = net.cell_attribute(ckey, "ijk")
-            if ijk[axis_idx] == target:
+            if is_surface:
+                on_face = net.cell_attribute(ckey, "face") == axis + side
+            else:
+                on_face = net.cell_attribute(ckey, "ijk")[axis_idx] == target
+            if on_face:
                 s = net.cell_attribute(ckey, "damage_score")
                 if s is not None and not (isinstance(s, float) and math.isnan(s)):
                     scores.append(s)
@@ -661,6 +711,7 @@ class CellularizedPart(Part):
             mesh=mesh if shape is None else None,
             grid=data["attributes"]["grid"],
             frame=frame,
+            cell_type=data["attributes"].get("cell_type", "volume"),
         )
         part.attributes.update(data["attributes"])
         part.key = data["key"]
@@ -673,6 +724,7 @@ class CellularizedPart(Part):
             mesh=self.mesh.copy() if self.shape is None and self.mesh is not None else None,
             grid=self.attributes["grid"],
             box_mode=self.attributes.get("box_mode", True),
+            cell_type=self.attributes.get("cell_type", "volume"),
             name=self.attributes.get("name"),
             frame=self.frame.copy(),
         )
