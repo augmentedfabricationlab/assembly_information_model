@@ -419,6 +419,7 @@ def build_wall(
     num_layers=1,
     bond_type="stretcher",
     curve=None,
+    closures=True,
 ):
     """Build an empty brick wall as an Assembly of positioned brick copies.
 
@@ -447,6 +448,12 @@ def build_wall(
         If given, courses follow this curve (from its start point) instead of
         a straight line along world X -- see the module docstring for the
         fitting/orientation rules.
+    closures : bool, optional
+        If True (default), insert partial closure bricks (half/quarter/
+        three-quarter) at the start/end of staggered courses to square off
+        the wall ends. If False, only whole bricks are placed: staggered
+        courses are simply offset, leaving a gap at their start and an
+        overhang at their end, and no slot has `is_closure` True.
 
     Returns
     -------
@@ -546,6 +553,7 @@ def build_wall(
     wall.attributes["num_courses"] = num_courses
     wall.attributes["num_layers"] = num_layers
     wall.attributes["bond_type"] = bond_type
+    wall.attributes["closures"] = closures
     if curve is None:
         wall.attributes["num_bricks_per_course"] = num_bricks_per_course
     else:
@@ -595,7 +603,9 @@ def build_wall(
             # `_header_closure_brick`. `closure_fractions[i]` is `None` for a
             # regular brick, or `course_bricks[i]`'s fraction of a full one.
             closure_fractions = [None] * len(course_bricks)
-            if bond_type in closure_bond and course % 2 == 1 and course_bricks:
+            if not closures:
+                pass
+            elif bond_type in closure_bond and course % 2 == 1 and course_bricks:
                 closure_brick, spacing = closure_bond[bond_type]
                 start_closure = closure_brick(spacing / 4.0, curve, curve_length)
 
