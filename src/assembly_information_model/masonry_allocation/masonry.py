@@ -68,7 +68,9 @@ Bond conventions used here (`bond_type`):
 All bond types share these rules:
 - Each course (row) is offset by half a brick-along-the-course-dimension
   from the course below, so vertical joints don't line up between courses.
-- Courses are stacked along world Z by (height + joint).
+- Courses are stacked along world Z by (height + joint), starting one
+  `joint` above the ground (a bed joint under the first course) unless
+  `base_joint=False`.
 - Layers (wythes) are stacked along the running direction's in-plane
   perpendicular by (width + joint); each layer repeats the same course/
   position/bond pattern, just offset sideways.
@@ -420,6 +422,7 @@ def build_wall(
     bond_type="stretcher",
     curve=None,
     closures=True,
+    base_joint=True,
 ):
     """Build an empty brick wall as an Assembly of positioned brick copies.
 
@@ -454,6 +457,10 @@ def build_wall(
         the wall ends. If False, only whole bricks are placed: staggered
         courses are simply offset, leaving a gap at their start and an
         overhang at their end, and no slot has `is_closure` True.
+    base_joint : bool, optional
+        If True (default), a bed joint of `joint` thickness sits under the
+        first course, so the wall starts at z = `joint` instead of directly
+        on the ground (z = 0). If False, the first course sits on z = 0.
 
     Returns
     -------
@@ -554,16 +561,20 @@ def build_wall(
     wall.attributes["num_layers"] = num_layers
     wall.attributes["bond_type"] = bond_type
     wall.attributes["closures"] = closures
+    wall.attributes["base_joint"] = base_joint
     if curve is None:
         wall.attributes["num_bricks_per_course"] = num_bricks_per_course
     else:
         wall.attributes["curve_length"] = curve_length
 
+    # bed joint under the first course, if any -- see `base_joint`
+    z_base = joint if base_joint else 0.0
+
     for layer in range(num_layers):
         layer_offset = layer * (depth + joint)
 
         for course in range(num_courses):
-            z = course * (H + joint) + H / 2.0
+            z = z_base + course * (H + joint) + H / 2.0
 
             if bond_type == "english":
                 if course % 2 == 0:

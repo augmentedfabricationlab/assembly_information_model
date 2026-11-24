@@ -62,7 +62,32 @@ def _row_col_stats(exposed_parts):
     return lo, span, counts
 
 
-def _band_function(exposed_parts, style, amount):
+def _cross_distance(part, lo, span, counts, floors):
+    """Distance, in courses, from `part` to the nearest arm of a (stacked) "cross" pattern.
+
+    The facade is split into `floors` equal floors, stacked bottom to top,
+    each with its own X running corner to corner of that floor, plus a
+    horizontal "floor beam" on every boundary between two floors -- like a
+    multi-storey braced frame. `floors=1` is a single X over the whole
+    facade with no beams. `position` is rescaled into course units *within*
+    each (layer, course), same as the single cross, and distance is measured
+    vertically (along courses) for diagonals and beams alike. Each brick is
+    sampled at its centre (course + 0.5, position + 0.5), not its lower-left
+    corner, so both diagonals run corner to corner and the X is symmetric.
+    """
+    row_idx = part.attributes["course"] - lo + 0.5
+    key = (part.attributes["layer"], part.attributes["course"])
+    height = span / floors
+    floor_idx = min(int(row_idx / height), floors - 1)
+    local_row = row_idx - floor_idx * height
+    local_col = (part.attributes["position"] + 0.5) / counts[key] * height
+    dist = min(abs(local_row - local_col), abs(local_row + local_col - height))
+    for k in range(1, floors):
+        dist = min(dist, abs(row_idx - k * height))
+    return dist
+
+
+def _band_function(exposed_parts, style, amount, floors=1):
     """A `Part -> int` band index, per `style`, for parts already known to be exposed."""
     lo, span, counts = _row_col_stats(exposed_parts)
     row_band = col_band = None
@@ -86,10 +111,7 @@ def _band_function(exposed_parts, style, amount):
         return lambda part: row_band(part) + col_band(part)
 
     def cross_band(part):
-        row_idx = part.attributes["course"] - lo
-        key = (part.attributes["layer"], part.attributes["course"])
-        col_idx = part.attributes["position"] / counts[key] * span
-        on_cross = min(abs(row_idx - col_idx), abs(row_idx + col_idx - span)) < amount / 2
+        on_cross = _cross_distance(part, lo, span, counts, floors) < amount / 2
         return 0 if on_cross else 1
 
     return cross_band
@@ -113,7 +135,7 @@ def _sawtooth(fraction, amount):
     return cycle
 
 
-def _gradient_function(exposed_parts, style, amount):
+def _gradient_function(exposed_parts, style, amount, floors=1):
     """A `Part -> float` value in `[0, 1]`, per `style`, for parts already known to be exposed.
 
     The continuous analogue of `_band_function`: "rows"/"columns" ramp
@@ -143,10 +165,7 @@ def _gradient_function(exposed_parts, style, amount):
         return lambda part: _sawtooth((row_fraction(part) + col_fraction(part)) / 2.0, amount)
 
     def cross_fraction(part):
-        row_idx = part.attributes["course"] - lo
-        key = (part.attributes["layer"], part.attributes["course"])
-        col_idx = part.attributes["position"] / counts[key] * span
-        dist = min(abs(row_idx - col_idx), abs(row_idx + col_idx - span))
+        dist = _cross_distance(part, lo, span, counts, floors)
         return max(0.0, 1.0 - dist / amount) if amount > 0 else (1.0 if dist == 0 else 0.0)
 
     return cross_fraction
@@ -169,7 +188,7 @@ def _bias(value, midpoint):
     return value ** exponent
 
 
-def _label_single_facade(container, facade, style, amount, alternate, gradient, midpoint):
+def _label_single_facade(container, facade, style, amount, alternate, gradient, midpoint, floors=1):
     axis_key = "front_axis" if facade == "front" else "back_axis"
     label_key = "{}_label".format(facade)
 
@@ -188,7 +207,7 @@ def _label_single_facade(container, facade, style, amount, alternate, gradient, 
         return
 
     if gradient:
-        value_of = _gradient_function(exposed_parts, style, amount)
+        value_of = _gradient_function(exposed_parts, style, amount, floors)
         for part in container.parts():
             if exposed(part):
                 value = _bias(value_of(part), midpoint)
@@ -197,7 +216,7 @@ def _label_single_facade(container, facade, style, amount, alternate, gradient, 
                 part.attributes[label_key] = None
         return
 
-    band = _band_function(exposed_parts, style, amount)
+    band = _band_function(exposed_parts, style, amount, floors)
 
     bad_band = 0 if alternate else 1
     for part in container.parts():
@@ -207,7 +226,7 @@ def _label_single_facade(container, facade, style, amount, alternate, gradient, 
             part.attributes[label_key] = None
 
 
-def label_facade(container, facade="front", style="rows", amount=2, alternate=True, gradient=False, midpoint=0.5):
+def label_facade(container, facade="front", style="rows", amount=2, alternate=True, gradient=False, midpoint=0.5, floors=1):
     """Label one (or both) facade(s) of `container` with a `[0, 1]` target -- stripes, a checkerboard, or a gradient.
 
     Parameters
@@ -277,6 +296,14 @@ def label_facade(container, facade="front", style="rows", amount=2, alternate=Tr
         before this parameter existed. With `alternate=False`, the
         midpoint's *labeled* value is `1.0 - midpoint` instead, since
         `alternate` flips the whole ramp after biasing.
+    floors : int, optional
+        Only used when `style="cross"`. Number of X's stacked bottom to top,
+        braced-frame style: the facade is split into `floors` equal floors,
+        each gets its own corner-to-corner X, and a horizontal "floor beam"
+        band runs along every boundary between floors (so `floors=2` is
+        two X's with one beam between them). Beams use the same thickness /
+        falloff (`amount`) as the diagonals. 1 (default) is the single X
+        over the whole facade, with no beams.
 
     Returns
     -------
@@ -285,8 +312,8 @@ def label_facade(container, facade="front", style="rows", amount=2, alternate=Tr
     Raises
     ------
     ValueError
-        If `amount` isn't a positive number, `style`/`facade` isn't one of
-        the values above, or (`gradient=True` only) `midpoint` isn't
+        If `amount` isn't a positive number, `floors` isn't a positive
+        integer, `style`/`facade` isn't one of the values above, or (`gradient=True` only) `midpoint` isn't
         strictly between 0 and 1.
     """
     if facade not in ("front", "back", "both"):
@@ -297,14 +324,17 @@ def label_facade(container, facade="front", style="rows", amount=2, alternate=Tr
         raise ValueError("amount must be a positive number, got {!r}.".format(amount))
     if gradient and not (0.0 < midpoint < 1.0):
         raise ValueError("midpoint must be strictly between 0 and 1, got {!r}.".format(midpoint))
+    if int(floors) != floors or floors < 1:
+        raise ValueError("floors must be a positive integer, got {!r}.".format(floors))
+    floors = int(floors)
 
     clean_labels(container)
 
     if facade != "both":
-        _label_single_facade(container, facade, style, amount, alternate, gradient, midpoint)
+        _label_single_facade(container, facade, style, amount, alternate, gradient, midpoint, floors)
         return
 
-    _label_single_facade(container, "front", style, amount, alternate, gradient, midpoint)
+    _label_single_facade(container, "front", style, amount, alternate, gradient, midpoint, floors)
     for part in container.parts():
         if part.attributes.get("back_axis") is None:
             continue

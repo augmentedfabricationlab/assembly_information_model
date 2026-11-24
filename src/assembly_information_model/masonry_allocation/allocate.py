@@ -12,7 +12,7 @@ to slots and returns a new assembly.
 Only labeled, exposed sides constrain matching -- a slot with `front_axis`
 set but no `front_label` (not labeled), or `front_axis=None` (not exposed
 there at all), imposes no requirement on that side. A slot can end up with
-zero requirements (any leftover brick will do), one (e.g. a stretcher, whose
+zero requirements (carried over unchanged, no stock used), one (e.g. a stretcher, whose
 `back_axis` is always `None`), or two (e.g. a header, exposed -- and
 possibly labeled differently -- on both faces).
 
@@ -39,9 +39,15 @@ choices, since they're the two ends of the one axis.
 Matching a brick to a slot
 --------------------------
 For any (slot, stock brick) pair, both possible orientations are scored by
-summing, over the slot's requirement(s), how far that orientation's
-side-score is from the label's target (a float in [0, 1] -- damage scores
-are in that same range -- see `cellularized_part.py`); the better
+summing, over the slot's requirement(s), the squared distance between that
+orientation's side-score and the label's target (a float in [0, 1] --
+damage scores are in that same range -- see `cellularized_part.py`).
+Squared rather than absolute so a `style="gradient"` labeling is honoured
+in order: with absolute distance, two bricks that both fall short of their
+slots' targets cost the same either way round, leaving the order to
+tie-breaking; squared distance always prefers the worse brick at the higher
+target. For discrete 0.0/1.0 labels it picks the same bricks for the bad
+slots as absolute distance would. The better
 orientation's cost is that pair's fit (see `_fit`). What differs between the
 two `algorithm` choices is how slots and bricks get paired up using those
 costs:
@@ -62,20 +68,64 @@ costs:
   greedy pick; less visible with discrete 0.0/1.0 labels, where many bricks
   tie for "good enough".
 
-Leftover slots (no requirement at all) and leftover stock, after either
-algorithm, are paired off in whatever order remains -- nothing to optimize
-there.
+Slots with no requirement at all (nothing labeled and exposed) draw no stock:
+they're copied into `result` unchanged, as parts, and unused stock is simply
+left over. Only the labeled (constrained) slots need enough stock.
 """
 
 from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import division
 
+import math
+
 from compas.geometry import Frame
 from compas.geometry import scale_vector
 from scipy.optimize import linear_sum_assignment
 
 from ..assembly import Assembly
+
+
+def _edge_aware_copy(brick, p):
+    """A copy of `brick` whose side-face damage scores are bled across its vertical edges.
+
+    At each vertical edge voxel the x-face cell and the y-face cell are a pair
+    (z faces never take part). Both become `max(own, softmax(a, b))` with
+    `softmax(a, b) = ((a**p + b**p) / 2) ** (1 / p)` -- a cell is pulled up
+    toward a worse partner but never improved by a better one. Cells off the
+    vertical edges are unchanged. The overwritten cells keep their original
+    score as `damage_score_raw`.
+    """
+    if brick.attributes.get("cell_type") != "surface":
+        raise ValueError('edge_aware=True requires bricks with cell_type="surface".')
+
+    result = brick.copy()
+    net = result.cell_network
+
+    voxels = {}
+    for ckey in net.cells():
+        if not net.cell_attribute(ckey, "active"):
+            continue
+        face = net.cell_attribute(ckey, "face")
+        if face[0] not in ("x", "y"):
+            continue
+        score = net.cell_attribute(ckey, "damage_score")
+        if score is None or math.isnan(score):
+            continue
+        ijk = tuple(net.cell_attribute(ckey, "ijk"))
+        voxels.setdefault(ijk, {}).setdefault(face[0], []).append(ckey)
+
+    for sides in voxels.values():
+        if len(sides.get("x", ())) != 1 or len(sides.get("y", ())) != 1:
+            continue
+        ckey_a, ckey_b = sides["x"][0], sides["y"][0]
+        a = float(net.cell_attribute(ckey_a, "damage_score"))
+        b = float(net.cell_attribute(ckey_b, "damage_score"))
+        soft = ((a**p + b**p) / 2.0) ** (1.0 / p)
+        for ckey, own in ((ckey_a, a), (ckey_b, b)):
+            net.cell_attribute(ckey, "damage_score_raw", own)
+            net.cell_attribute(ckey, "damage_score", max(own, soft))
+    return result
 
 
 def _slot_requirements(slot):
@@ -89,17 +139,18 @@ def _slot_requirements(slot):
     return requirements
 
 
-def _brick_end_scores(brick, axis):
+def _brick_end_scores(brick, axis, face_p=1.0):
     """(minus, plus) damage scores of `brick`'s two `axis` ends.
 
-    Falls back to the brick's overall `mean_damage()` (or 0.0) for whichever
-    end has no graded cells of its own.
+    Each end is `face_damage(axis, side, p=face_p)` -- see `allocate`'s
+    `face_p`. Falls back to the brick's overall `mean_damage()` (or 0.0) for
+    whichever end has no graded cells of its own.
     """
     fallback = brick.mean_damage()
     if fallback is None:
         fallback = 0.0
-    minus = brick.face_damage(axis, "-")
-    plus = brick.face_damage(axis, "+")
+    minus = brick.face_damage(axis, "-", p=face_p)
+    plus = brick.face_damage(axis, "+", p=face_p)
     return (minus if minus is not None else fallback, plus if plus is not None else fallback)
 
 
@@ -118,8 +169,12 @@ def _fit(requirements, minus, plus):
     unflipped = {"front": minus, "back": plus}
     flipped = {"front": plus, "back": minus}
 
+    # squared (not absolute) distance: with |s - t|, swapping two bricks that
+    # both fall short of (or both overshoot) their targets costs the same, so
+    # a gradient's order is left to tie-breaking; squaring makes the ordered
+    # placement (worse brick -> higher target) strictly cheaper
     def cost(sides):
-        return sum(abs(sides[side] - label) for side, _axis, label in requirements)
+        return sum((sides[side] - label) ** 2 for side, _axis, label in requirements)
 
     cost_unflipped, cost_flipped = cost(unflipped), cost(flipped)
     if cost_unflipped <= cost_flipped:
@@ -137,7 +192,7 @@ def _flip_frame(frame):
     return Frame(frame.point, scale_vector(frame.xaxis, -1.0), scale_vector(frame.yaxis, -1.0))
 
 
-def _match_greedy(constrained, remaining):
+def _match_greedy(constrained, remaining, face_p=1.0):
     """[(slot, brick, flipped, front_score, back_score), ...] via a greedy, one-slot-at-a-time heuristic.
 
     Slots are settled most-constrained-first (two requirements before one),
@@ -152,6 +207,8 @@ def _match_greedy(constrained, remaining):
     remaining : list[:class:`CellularizedPart`]
         Stock bricks available to assign. Not mutated -- a copy is consumed
         internally.
+    face_p : float, optional
+        Power-mean exponent for each brick's end scores -- see `allocate`.
 
     Returns
     -------
@@ -169,7 +226,7 @@ def _match_greedy(constrained, remaining):
 
         best_index = best_cost = best_flipped = best_minus = best_plus = None
         for index, brick in enumerate(remaining):
-            minus, plus = _brick_end_scores(brick, axis)
+            minus, plus = _brick_end_scores(brick, axis, face_p)
             cost, flipped = _fit(requirements, minus, plus)
             if best_cost is None or cost < best_cost:
                 best_index, best_cost, best_flipped = index, cost, flipped
@@ -190,7 +247,7 @@ def _match_greedy(constrained, remaining):
     return assignments, remaining
 
 
-def _match_hungarian(constrained, remaining):
+def _match_hungarian(constrained, remaining, face_p=1.0):
     """[(slot, brick, flipped, front_score, back_score), ...] via a global optimal assignment.
 
     Builds the full (constrained slot) x (remaining stock) cost matrix --
@@ -207,6 +264,8 @@ def _match_hungarian(constrained, remaining):
         (slot, requirements) pairs, as built by :func:`allocate`.
     remaining : list[:class:`CellularizedPart`]
         Stock bricks available to assign. Not mutated.
+    face_p : float, optional
+        Power-mean exponent for each brick's end scores -- see `allocate`.
 
     Returns
     -------
@@ -220,7 +279,7 @@ def _match_hungarian(constrained, remaining):
     def end_scores(index, axis):
         key = (index, axis)
         if key not in end_score_cache:
-            end_score_cache[key] = _brick_end_scores(remaining[index], axis)
+            end_score_cache[key] = _brick_end_scores(remaining[index], axis, face_p)
         return end_score_cache[key]
 
     cost_matrix = []
@@ -265,7 +324,7 @@ def _match_hungarian(constrained, remaining):
 _MATCHERS = {"greedy": _match_greedy, "hungarian": _match_hungarian}
 
 
-def allocate(container, stock, algorithm="hungarian"):
+def allocate(container, stock, algorithm="hungarian", edge_aware=False, edge_p=4.0, face_p=1.0):
     """Assign stock bricks to container slots, in a new assembly.
 
     Parameters
@@ -286,10 +345,26 @@ def allocate(container, stock, algorithm="hungarian"):
         (`scipy.optimize.linear_sum_assignment`), minimizing total cost
         across all constrained slots at once. "greedy": a cheaper,
         one-slot-at-a-time heuristic with no lookahead. Unconstrained slots
-        (no requirement at all) are unaffected either way -- always paired
-        off with whatever stock is left over, in slot order. Closure slots
+        (no requirement at all) are unaffected either way -- they're copied
+        into the result unchanged, using no stock. Closure slots
         (`is_closure`) never take part in this regardless of `algorithm` --
         see the module docstring.
+    edge_aware : bool, optional
+        If True, each stock brick's side-face (x/y) cell scores are first
+        bled across its vertical edges -- see `_edge_aware_copy` -- on a
+        copy, so `stock` itself stays untouched. The placed bricks carry the
+        adjusted `damage_score` (originals kept as `damage_score_raw`).
+        Default False.
+    edge_p : float, optional
+        Exponent of the soft-max used when `edge_aware` is True: 1 is a
+        plain mean (a cell is only lifted to the pair mean), larger values
+        approach the pair's max. Default 4.
+    face_p : float, optional
+        How a brick's exposed face is summarized into one score: the power
+        mean `(mean(s**p)) ** (1/p)` of that face's cells (see
+        `CellularizedPart.face_damage`). 1 (default) is the plain mean, where
+        one deep break among clean cells gets averaged away; larger values
+        (e.g. 4) weigh the worst cells more, approaching the face's max.
 
     Returns
     -------
@@ -321,8 +396,8 @@ def allocate(container, stock, algorithm="hungarian"):
     Raises
     ------
     ValueError
-        If `stock` doesn't have enough parts for the container's non-closure
-        slots, or `algorithm` isn't "hungarian" or "greedy".
+        If `stock` doesn't have enough parts for the container's labeled
+        (constrained) slots, or `algorithm` isn't "hungarian" or "greedy".
     """
     if algorithm not in _MATCHERS:
         raise ValueError('algorithm must be "hungarian" or "greedy", got {!r}.'.format(algorithm))
@@ -334,18 +409,22 @@ def allocate(container, stock, algorithm="hungarian"):
     for slot in slots:
         (closures if slot.attributes.get("is_closure") else regular).append(slot)
 
-    stock_parts = list(stock.parts())
-    if len(stock_parts) < len(regular):
-        raise ValueError(
-            "Not enough stock bricks ({}) for the container's {} non-closure slots.".format(
-                len(stock_parts), len(regular)
-            )
-        )
-
     constrained, unconstrained = [], []
     for slot in regular:
         requirements = _slot_requirements(slot)
         (constrained if requirements else unconstrained).append((slot, requirements))
+
+    # only labeled (constrained) slots draw on stock; unlabeled ones are
+    # carried over as-is below
+    stock_parts = list(stock.parts())
+    if edge_aware:
+        stock_parts = [_edge_aware_copy(brick, edge_p) for brick in stock_parts]
+    if len(stock_parts) < len(constrained):
+        raise ValueError(
+            "Not enough stock bricks ({}) for the container's {} labeled slots.".format(
+                len(stock_parts), len(constrained)
+            )
+        )
 
     result = Assembly(name="allocated_" + (container.name or "assembly"))
     # carry over build_wall's own wall-level metadata (brick_size, joint,
@@ -376,16 +455,14 @@ def allocate(container, stock, algorithm="hungarian"):
         result.add_part(occupant, key=slot.key)
 
     # closures are dropped entirely -- not placed in `result` at all (see
-    # the module docstring); `remaining` note below skips them too
-    assignments, remaining = _MATCHERS[algorithm](constrained, stock_parts)
+    # the module docstring)
+    assignments, _leftover = _MATCHERS[algorithm](constrained, stock_parts, face_p)
     for slot, brick, flipped, front_score, back_score in assignments:
         place(slot, brick, flipped, front_score, back_score)
 
-    unconstrained.sort(
-        key=lambda pair: (pair[0].attributes["layer"], pair[0].attributes["course"], pair[0].attributes["position"])
-    )
-    for (slot, _requirements), brick in zip(unconstrained, remaining):
-        place(slot, brick, False, None, None)
+    # unlabeled slots take no stock: they carry over unchanged, as parts
+    for slot, _ in unconstrained:
+        result.add_part(slot.copy(), key=slot.key)
 
     # container's own connections (if any -- e.g. from connect_wall) are
     # still valid as-is on result, since occupants share their slot's key --

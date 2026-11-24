@@ -643,8 +643,8 @@ class CellularizedPart(Part):
             return None
         return sum(scores) / len(scores)
 
-    def face_damage(self, axis, side):
-        """Mean damage score of the cells on one face of the grid.
+    def face_damage(self, axis, side, p=1.0):
+        """Power mean damage score of the cells on one face of the grid.
 
         Parameters
         ----------
@@ -652,12 +652,17 @@ class CellularizedPart(Part):
             Which axis is normal to the face of interest.
         side : {'-', '+'}
             The low (-) or high (+) side along that axis.
+        p : float, optional
+            Exponent of the power mean `(mean(s**p)) ** (1/p)`. 1 (default)
+            is the plain mean; larger values weigh the worst cells more,
+            approaching the face's max -- so a single deep break isn't
+            averaged away by the clean cells around it.
 
         Returns
         -------
         float | None
-            Mean damage score of the (active) cells touching that face, or
-            None if none of them are graded.
+            Power mean damage score of the (active) cells touching that
+            face, or None if none of them are graded.
         """
         nx, ny, nz = self.attributes["grid"]
         axis_idx = {"x": 0, "y": 1, "z": 2}[axis]
@@ -680,7 +685,9 @@ class CellularizedPart(Part):
                     scores.append(s)
         if not scores:
             return None
-        return sum(scores) / len(scores)
+        if p == 1.0:
+            return sum(scores) / len(scores)
+        return (sum(s**p for s in scores) / len(scores)) ** (1.0 / p)
 
     # ------------------------------------------------------------------
     # Serialization: extend Part's __data__ with shape/mesh + cell grid
